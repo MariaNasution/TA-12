@@ -1,23 +1,46 @@
+# ======================
+# Node.js
+# ======================
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# Next.js build
+frontend/.next/
+
+# ======================
 # Python
+# ======================
 venv/
 __pycache__/
 *.pyc
 .env
 
-# Node
-node_modules/
-
+# ======================
 # Hardhat
-artifacts/
-cache/
+# ======================
+backend/artifacts/
+backend/cache/
 
-# Blockchain node
+# ======================
+# Chroma DB
+# ======================
+backend/chroma_db/
+
+# ======================
+# Blockchain local node
+# ======================
 node1/
 backend/node1/
 
-# Model AI
+# ======================
+# AI Model
+# ======================
 backend/lora_model_herbal/
 
-# OS
+# ======================
+# Other
+# ======================
+*.zip
 .DS_Store
 Thumbs.db
