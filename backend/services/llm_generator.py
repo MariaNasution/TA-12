@@ -86,86 +86,105 @@ from prompts.herbal_prompt import REASONER_PROMPT
 def generate_herbal_recommendation(llm_input):
     try:
         patient_context = llm_input.get("patient_context", {})
-        safe_herbs = llm_input.get("safe_herbs", []) # Hasil pencarian ChromaDB
+        safe_herbs = llm_input.get("safe_herbs", []) 
 
         keluhan = patient_context.get("keluhan", "Umum")
-        # Pastikan riwayat medis jadi string untuk prompt
         riwayat_medis = patient_context.get("kondisi_medis", [])
-        if isinstance(riwayat_medis, list):
-            riwayat_medis_str = ", ".join(riwayat_medis)
-        else:
-            riwayat_medis_str = str(riwayat_medis)
+        riwayat_medis_str = ", ".join(riwayat_medis) if riwayat_medis else "Tidak ada riwayat medis tercatat"
 
-        print("\n === ANALISIS HYBRID DIMULAI ===")
-
+        print("\n" + "="*50)
+        print("🛡️  MEMULAI AUDIT KEAMANAN HYBRID (BLOCKCHAIN + AI)")
+        print("="*50)
+        
         final_rekomendasi = []
 
         for herb in safe_herbs:
             nama_herb = herb.get("nama") or herb.get("name") or "Herbal Tanpa Nama"
-            indikasi = herb.get("indikasi", "").lower()
             kontra = herb.get("kontraindikasi", "").lower()
             deskripsi = herb.get("deskripsi") or ""
+            indikasi = herb.get("indikasi") or ""
 
-            print(f"\n🔍 Mengecek Herbal: {nama_herb}")
+            print(f"\n🔍 Mengevaluasi: {nama_herb}")
 
             # ==========================================================
-            # 1️⃣ RULE-BASED SAFETY CHECK (Anti-Halu Keamanan)
+            # 1️⃣ VERIFIKASI KEAMANAN BLOCKCHAIN (Audit Kritis)
             # ==========================================================
-            
-            # A. Cek Kontraindikasi vs Riwayat Medis (Blockchain)
+            # --- BAGIAN AUDIT KEAMANAN ---
             is_bahaya = False
+            penyakit_pemicu = ""
             for kondisi in riwayat_medis:
                 if kondisi.lower().strip() in kontra:
-                    print(f"BLOKIR: Bentrok dengan riwayat {kondisi}")
+                    print(f"🛑 BLOKIR OTOMATIS: Kontraindikasi riwayat {kondisi}")
                     is_bahaya = True
+                    penyakit_pemicu = kondisi 
                     break
-            if is_bahaya: continue
-
-            # B. Cek Kontraindikasi vs Keluhan Saat Ini
-            if keluhan.lower().strip() in kontra:
-                print(f"BLOKIR: Kontraindikasi dengan keluhan {keluhan}")
-                continue
-
-            # ==========================================================
-            # 2️⃣ RELEVANCE CHECK (Anti-Nggak Nyambung)
-            # ==========================================================
-    
             
-            if keluhan.lower().strip() not in indikasi:
-                print(f"SKIP: Tidak relevan. Keluhan '{keluhan}' tidak ditemukan di indikasi herbal.")
-                continue
+            if is_bahaya:
+                prompt_penolakan = f"""
+                Jelaskan secara profesional mengapa herbal {nama_herb} dilarang bagi pasien 
+                dengan riwayat medis {penyakit_pemicu}. Hubungkan dengan keluhan pasien yaitu {keluhan}.
+                """
+                
+                alasan_ai = generate_qwen(
+                    system_prompt="Anda adalah Pakar Keamanan Herbal Medis.",
+                    user_prompt=prompt_penolakan
+                )
 
+                final_rekomendasi.append({
+                    "id": herb.get("id"),
+                    "nama": "Tidak ada herbal yang direkomendasikan",
+                    "alasan": 
+                    f"Berdasarkan analisis keluhan ({keluhan}) dan audit riwayat medis pasien ({riwayat_medis_str}), "
+                    f"sistem berhasil mengevaluasi satu kandidat herbal yang paling relevan yaitu {nama_herb}. "
+                    f"Namun, {alasan_ai.strip()} "
+                    f"Sehingga kandidat tersebut dinyatakan TIDAK AMAN untuk dikonsumsi saat ini.",
+                    "status": "danger"
+                })
+                continue 
             # ==========================================================
-            # 3️⃣ REASONING BY FINETUNED AI (Hanya jika lolos semua)
+            # 2️⃣ EDUKASI & REASONING AI (LLM Qwen LoRA)
             # ==========================================================
-            print("LOLOS SEMUA FILTER: Meminta AI merangkai penjelasan...")
+            print(f" {nama_herb} Aman. AI sedang menyusun analisis medis...")
 
-            prompt_template = PromptTemplate.from_template(REASONER_PROMPT)
-            user_prompt = prompt_template.format(
-                nama_herbal=nama_herb,
-                keluhan_pasien=keluhan,
-                riwayat_medis=riwayat_medis_str,
-                deskripsi_herbal=deskripsi
-            )
+            REASONER_PROMPT = f"""
+            Tugas: Anda adalah Pakar Herbal Medis yang terintegrasi dengan data Rekam Medis Blockchain.
+            
+            DATA PASIEN:
+            - Keluhan: {keluhan}
+            - Riwayat (Blockchain): {riwayat_medis_str}
+            
+            DATA HERBAL:
+            - Nama: {nama_herb}
+            - Khasiat: {indikasi}
+            - Deskripsi: {deskripsi}
+
+            INSTRUKSI JAWABAN:
+            1. EDUKASI: Jelaskan secara singkat apa itu {keluhan} di paragraf pertama.
+            2. ALASAN: Jelaskan mengapa {nama_herb} cocok membantu kondisi tersebut.
+            3. KONFIRMASI: Tegaskan bahwa herbal ini aman dikonsumsi meskipun pasien memiliki riwayat {riwayat_medis_str}.
+            4. SARAN: Berikan cara penggunaan singkat.
+
+            Format jawaban: Paragraf profesional dan edukatif.
+            """
 
             alasan_ai = generate_qwen(
-                system_prompt="Anda adalah pakar herbal cerdas.",
-                user_prompt=user_prompt
+                system_prompt="Anda adalah Spesialis Medis Herbal AI.",
+                user_prompt=REASONER_PROMPT
             )
 
             final_rekomendasi.append({
                 "id": herb.get("id"),
                 "nama": nama_herb,
                 "alasan": alasan_ai.strip(),
-                "cara_penggunaan": herb.get("cara_penggunaan") or "Gunakan sesuai petunjuk umum."
+                "cara_penggunaan": herb.get("cara_penggunaan") or "Gunakan sesuai takaran yang disarankan."
             })
 
         return {
             "status": "success",
             "rekomendasi": final_rekomendasi,
-            "catatan": "Rekomendasi ini telah diverifikasi secara otomatis terhadap riwayat medis Anda."
+            "catatan_keamanan": "Data telah divalidasi silang dengan riwayat medis Anda yang tersimpan di Blockchain."
         }
 
     except Exception as e:
-        print(f"ERROR GENERATOR: {str(e)}")
+        print(f"❌ ERROR GENERATOR: {str(e)}")
         return {"error": str(e)}, 500

@@ -394,31 +394,68 @@ const loadRequests = async () => {
                 </button>
 
                 {rekomendasi && (
-                    <div style={{ marginTop: '20px', padding: '15px', background: 'white', borderRadius: '10px', borderLeft: '5px solid #0070f3' }}>
-                        <h4>🌿 Hasil Analisis Pakar Herbal:</h4>
-                        
-                        {/* Jika ada rekomendasi yang divalidasi */}
-                        {rekomendasi.rekomendasi && rekomendasi.rekomendasi.length > 0 ? (
-                            rekomendasi.rekomendasi.map((item, index) => (
-                                <div key={index} style={{ marginBottom: '15px', padding: '10px', borderBottom: '1px solid #eee' }}>
-                                    <p style={{ margin: '0', fontWeight: 'bold', color: '#28a745' }}>{item.nama}</p>
-                                    <p style={{ margin: '5px 0', fontSize: '0.9rem', color: '#555' }}>
-                                        <strong>Alasan:</strong> {item.alasan}
-                                    </p>
-                                </div>
-                            ))
-                        ) : (
-                            /* Jika AI tidak menemukan herbal yang aman (validated empty) */
-                            <p style={{ color: '#dc3545', fontWeight: 'bold' }}>
-                                {rekomendasi.catatan || "Tidak ada herbal yang disarankan untuk kondisi medis Anda."}
-                            </p>
-                        )}
-                        
-                        <p style={{ fontSize: '0.7rem', color: '#888', marginTop: '10px' }}>
-                            *Analisis berdasarkan data rekam medis terverifikasi di Blockchain.
+                <div style={{ 
+                    marginTop: '20px', 
+                    padding: '20px', 
+                    background: 'white', 
+                    borderRadius: '10px', 
+                    // Garis pinggir berubah merah jika ada status danger
+                    borderLeft: `5px solid ${rekomendasi.rekomendasi?.some(r => r.status === 'danger') ? '#dc3545' : '#28a745'}`,
+                    boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                }}>
+                    <h4 style={{ 
+                        color: rekomendasi.rekomendasi?.some(r => r.status === 'danger') ? '#dc3545' : '#28a745',
+                        marginTop: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px'
+                    }}>
+                        {rekomendasi.rekomendasi?.some(r => r.status === 'danger') ? 'Hasil Analisis Keamanan:' : '🌿 Hasil Analisis Pakar Herbal:'}
+                    </h4>
+                    
+                    {rekomendasi.rekomendasi && rekomendasi.rekomendasi.length > 0 ? (
+                        rekomendasi.rekomendasi.map((item, index) => (
+                            <div key={index} style={{ marginBottom: '15px', padding: '10px' }}>
+                                {/* Judul Herbal / Status */}
+                                <p style={{ 
+                                    margin: '0 0 10px 0', 
+                                    fontWeight: 'bold', 
+                                    fontSize: '1.1rem',
+                                    color: item.status === 'danger' ? '#dc3545' : '#28a745' 
+                                }}>
+                                    {item.nama}
+                                </p>
+                                
+                                {/* Isi Alasan AI */}
+                                <p style={{ 
+                                    margin: '5px 0', 
+                                    fontSize: '0.95rem', 
+                                    color: '#333', 
+                                    lineHeight: '1.6',
+                                    textAlign: 'justify' 
+                                }}>
+                                    {item.alasan}
+                                </p>
+                            </div>
+                        ))
+                    ) : (
+                        <p style={{ color: '#dc3545', fontWeight: 'bold' }}>
+                            {rekomendasi.catatan || "Tidak ada herbal yang ditemukan untuk kondisi Anda."}
                         </p>
+                    )}
+                    
+                    <div style={{ 
+                        marginTop: '15px', 
+                        paddingTop: '10px', 
+                        borderTop: '1px solid #eee',
+                        fontSize: '0.75rem', 
+                        color: '#888',
+                        fontStyle: 'italic'
+                    }}>
+                        *Penjelasan medis di atas dihasilkan melalui penalaran (reasoning) otomatis oleh model AI
                     </div>
-                )}
+                </div>
+            )}
             </div>
         </div>
     );

@@ -25,18 +25,22 @@ Jawab hanya YA atau TIDAK.
 """
 
 REASONER_PROMPT = """
-Tugas: Buat 1 kalimat alasan profesional.
+Anda adalah Spesialis Medis Herbal yang terintegrasi dengan Rekam Medis Blockchain.
 
-Logika wajib:
-1. Herbal dipilih karena cocok untuk keluhan utama.
-2. Herbal aman karena tidak berbenturan dengan riwayat medis.
-3. Jangan menyebut herbal mengobati riwayat medis.
+DATA PASIEN:
+- Keluhan Utama: {keluhan_pasien}
+- Riwayat Medis di Blockchain: {riwayat_medis}
 
-Gunakan data berikut:
-Nama Herbal: {nama_herbal}
-Keluhan: {keluhan_pasien}
-Riwayat Medis: {riwayat_medis}
+DATA HERBAL:
+- Nama: {nama_herbal}
+- Khasiat: {indikasi}
+- Kontraindikasi: {kontraindikasi}
 
-Format contoh:
-"{nama_herbal} dipilih untuk membantu meredakan {keluhan_pasien} Anda dan tetap aman dikonsumsi meskipun Anda memiliki riwayat {riwayat_medis}."
+TUGAS ANDA:
+1. EDUKASI: Jelaskan secara singkat apa itu {keluhan_pasien} dalam 1-2 kalimat medis yang mudah dimengerti.
+2. ANALISIS: Jelaskan mengapa {nama_herbal} cocok untuk kondisi tersebut.
+3. KEAMANAN: Berikan penegasan bahwa herbal ini AMAN bagi pasien karena tidak berbenturan dengan riwayat {riwayat_medis}.
+4. SARAN: Berikan instruksi singkat pemakaian.
+
+JAWABAN (Gunakan format paragraf yang rapi):
 """
