@@ -1,78 +1,9 @@
 import { useAuth } from '../../context/AuthContext';
 import { CONTRACT_ADDRESS, HEALTH_RECORD_ABI } from '../../api/contract_abi';
 import { ethers } from 'ethers';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/router';
 
-// --- KOMPONEN DROPDOWN ICD-10 ---
-function IcdSearchInput({ value, onChange, placeholder, disabled }) {
-    const [suggestions, setSuggestions] = useState([]);
-    const [showSuggestions, setShowSuggestions] = useState(false);
-    const [isSearching, setIsSearching] = useState(false);
-    const wrapperRef = useRef(null);
-
-    useEffect(() => {
-        function handleClickOutside(event) {
-            if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
-                setShowSuggestions(false);
-            }
-        }
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, []);
-
-    const handleSearch = async (query) => {
-        onChange(query);
-        if (query.length < 3) {
-            setSuggestions([]);
-            return;
-        }
-        setIsSearching(true);
-        try {
-            const res = await fetch(`http://localhost:5000/herbal/search-icd?q=${query}`);
-            const data = await res.json();
-            setSuggestions(data);
-            setShowSuggestions(true);
-        } catch (err) {
-            console.error("Gagal cari ICD:", err);
-        } finally {
-            setIsSearching(false);
-        }
-    };
-
-    return (
-        <div ref={wrapperRef} style={{ position: 'relative', marginBottom: '10px' }}>
-            <textarea 
-                value={value} 
-                onChange={(e) => handleSearch(e.target.value)}
-                onFocus={() => value.length >= 3 && setShowSuggestions(true)}
-                placeholder={placeholder}
-                disabled={disabled}
-                style={{ width: '100%', padding: '10px', height: '100px', boxSizing: 'border-box', border: '1px solid #ccc', borderRadius: '5px', fontFamily: 'inherit' }} 
-                required 
-            />
-            {showSuggestions && suggestions.length > 0 && (
-                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: '1px solid #ddd', borderRadius: '5px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', zIndex: 100, maxHeight: '150px', overflowY: 'auto' }}>
-                    {suggestions.map((item, idx) => (
-                        <div 
-                            key={idx} 
-                            style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #eee', fontSize: '13px' }}
-                            onClick={() => {
-                                onChange(item.label); 
-                                setShowSuggestions(false);
-                            }}
-                            onMouseEnter={(e) => e.target.style.background = '#f0f0f0'}
-                            onMouseLeave={(e) => e.target.style.background = 'white'}
-                        >
-                            {item.label}
-                        </div>
-                    ))}
-                </div>
-            )}
-            {isSearching && <small style={{color: '#0070f3'}}> Mencari kode resmi ICD-10...</small>}
-        </div>
-    );
-}
 
 export default function DoctorDashboard() {
     const { address, role, loading } = useAuth();
@@ -86,37 +17,30 @@ export default function DoctorDashboard() {
     const router = useRouter();
 
     
-    // ===========================
-    // 1. Ambil data riwayat medis dari backend + tambahkan index
-    // ===========================
-    const fetchMedicalHistory = async () => {
-        if (!address) return; // Jangan panggil kalau wallet belum konek
+    const fetchMedicalHistory = useCallback(async () => {
+        if (!address || role !== 'doctor') return; 
 
         try {
-            // Kirim alamat dokter (address dari useAuth) ke Flask
             const response = await fetch(`http://127.0.0.1:5000/medical/list?doctor=${address}&t=${Date.now()}`);
             const data = await response.json();
 
             if (response.ok && data.history) {
-                console.log("🏥 --- LOG DATA DI DASHBOARD DOKTER ---");
-                data.history.forEach(patient => {
-                    console.log(`Pasien: ${patient.address}`);
-                    console.table(patient.medicalRecords); // Membuat tabel di console
-                });
                 setPatients(data.history);
             }
         } catch (error) {
             console.error("Gagal menarik data:", error);
         }
-    };
+    }, [address, role]); 
 
-    // ===========================
-    // 2. Panggil fetch saat page load atau address berubah
-    // ===========================
     useEffect(() => {
-        if (!loading && role !== 'doctor') router.push('/');
-        if (address) fetchMedicalHistory(); 
-    }, [role, loading, address]);
+        if (!loading) {
+            if (role === 'doctor' && address) {
+                fetchMedicalHistory();
+            } else if (role !== 'doctor') {
+                router.push('/');
+            }
+        }
+    }, [loading, address, role, fetchMedicalHistory, router]);
 
     // ===========================
     // 3. Persiapkan edit rekam medis
@@ -184,31 +108,33 @@ export default function DoctorDashboard() {
             const provider = new ethers.providers.Web3Provider(window.ethereum);
             const signer = provider.getSigner();
             const contract = new ethers.Contract(CONTRACT_ADDRESS, HEALTH_RECORD_ABI, signer);
+            
             const patientChecksum = ethers.utils.getAddress(patientAddr.toLowerCase().trim());
 
-            // --- LANGKAH 1: Ambil Index Secara Dinamis (Lewat Metamask) ---
+            // A. Ambil index terbaru dari Blockchain
             const records = await contract.getMedicalRecords(patientChecksum);
             const nextIndex = records.length;
 
-            // --- LANGKAH 2: Lapor ke Flask ---
+            // B. Kirim ke Flask (Di sini Semantic Ingest terjadi)
             const response = await fetch(`http://127.0.0.1:5000/medical/store`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    diagnosis: medicalData,
+                    diagnosis: medicalData, 
                     patient_address: patientAddr,
-                    blockchain_index: nextIndex // 👈 Kirim index ini ke Flask
+                    blockchain_index: nextIndex 
                 })
             });
 
             const result = await response.json();
             if (!response.ok) throw new Error(result.error);
 
-            // --- LANGKAH 3: Simpan ke Blockchain ---
+            // C. Simpan CID IPFS ke Blockchain
             const tx = await contract.storeMedicalRecord(patientChecksum, result.ipfs_cid);
             await tx.wait();
 
-            alert("✅ Berhasil Disimpan!");
+            alert("✅ Diagnosa Berhasil Disimpan secara Semantik!");
+            setMedicalData('');
             fetchMedicalHistory();
         } catch (error) {
             alert(`Gagal: ${error.message}`);
@@ -243,16 +169,33 @@ export default function DoctorDashboard() {
             )}
 
             {activeTab === 'input' && (
-                <form onSubmit={handleSaveMedicalData} style={{ padding: '20px', border: `2px solid ${isEditMode ? '#ffc107' : '#dc3545'}`, borderRadius: '8px' }}>
-                    <h3>{isEditMode ? "Edit Riwayat Medis" : "Input Diagnosa Baru"}</h3>
-                    <input type="text" value={patientAddr} onChange={(e) => setPatientAddr(e.target.value)} placeholder="Alamat Wallet Pasien" style={{ width: '100%', padding: '10px', marginBottom: '10px', boxSizing: 'border-box' }} required disabled={isEditMode} />
+                <form onSubmit={handleSaveMedicalData} style={{ padding: '20px', border: '2px solid #dc3545', borderRadius: '8px' }}>
+                    <h3>Input Diagnosa Baru (Bebas)</h3>
+                    <input 
+                        type="text" 
+                        value={patientAddr} 
+                        onChange={(e) => setPatientAddr(e.target.value)} 
+                        placeholder="Alamat Wallet Pasien (0x...)" 
+                        style={{ width: '100%', padding: '12px', marginBottom: '15px', borderRadius: '5px', border: '1px solid #ddd' }} 
+                        required 
+                    />
                     
-                    {/* IMPLEMENTASI DROPDOWN ICD-10 */}
-                    <IcdSearchInput 
-                        value={medicalData} 
-                        onChange={setMedicalData} 
-                        placeholder="Ketik diagnosa pasien (Cari di master data ICD-10)..."
-                        disabled={false}
+                    <p style={{ fontSize: '14px', color: '#666', marginBottom: '5px' }}>Tuliskan diagnosa atau keluhan pasien secara mendetail:</p>
+                    <textarea 
+                        value={medicalData}
+                        onChange={(e) => setMedicalData(e.target.value)}
+                        placeholder="Contoh: Pasien mengeluh pusing di bagian belakang kepala dan memiliki riwayat kencing manis selama 2 tahun..."
+                        style={{ 
+                            width: '100%', 
+                            height: '150px', 
+                            padding: '12px', 
+                            marginBottom: '15px', 
+                            borderRadius: '5px', 
+                            border: '1px solid #ddd',
+                            fontFamily: 'inherit',
+                            resize: 'vertical'
+                        }}
+                        required
                     />
 
                     <button type="submit" disabled={txLoading} style={{ width: '100%', padding: '10px', background: isEditMode ? '#ffc107' : '#dc3545', color: 'white', border: 'none', borderRadius: '5px' }}>

@@ -3,6 +3,8 @@ import { CONTRACT_ADDRESS, HEALTH_RECORD_ABI } from '../../api/contract_abi';
 import { ethers } from 'ethers';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
+import ReactMarkdown from 'react-markdown';
+
 
 export default function PatientDashboard() {
     const { address, role, loading } = useAuth();
@@ -17,6 +19,7 @@ export default function PatientDashboard() {
     const [suggestions, setSuggestions] = useState([]);
     const [isSearching, setIsSearching] = useState(false);
     const [showSuggestions, setShowSuggestions] = useState(false);
+    const [useRag, setUseRag] = useState(true);
 
     useEffect(() => {
         if (!loading && role !== 'patient') {
@@ -161,16 +164,16 @@ const loadRequests = async () => {
     };
 
     const handleGetAIRecommendation = async () => {
-        // 1. RESET HASIL SEBELUMNYA (Agar tidak muncul jawaban lama)
         setRekomendasi(null); 
-        
-        // 2. SET LOADING
+  
         setIsRecommending(true);
 
         try {
             const kondisiMedis = medicalRecords.map(r => r.diagnosis).join(', ');
 
-            const response = await fetch('http://localhost:5000/herbal/recommendation-input?q=' + keluhan + '&medical=' + kondisiMedis);
+            const response = await fetch(
+                `http://localhost:5000/herbal/recommendation-input?q=${keluhan}&medical=${kondisiMedis}&use_rag=${useRag}`
+            );
             const data = await response.json();
             
             setRekomendasi(data);
@@ -203,25 +206,10 @@ const loadRequests = async () => {
         }
     };
 
-        const handleSearchKeluhan = async (query) => {
+    const handleSearchKeluhan = async (query) => {
         setKeluhan(query);
-        if (query.length < 3) {
-            setSuggestions([]);
-            return;
-        }
-
-        setIsSearching(true);
-        try {
-            // Panggil endpoint search ICD-10 yang kita buat di Flask
-            const response = await fetch(`http://localhost:5000/herbal/search-icd?q=${query}`);
-            const data = await response.json();
-            setSuggestions(data); // Data berisi [{label: "A00 - Kolera", value: "A00"}, ...]
-            setShowSuggestions(true);
-        } catch (error) {
-            console.error("Gagal mencari saran:", error);
-        } finally {
-            setIsSearching(false);
-        }
+        setSuggestions([]);
+        setShowSuggestions(false);
     };
 
     useEffect(() => {
@@ -233,7 +221,6 @@ const loadRequests = async () => {
         };
 
         initLoad();
-        // Dependency 'loading' ditambahkan agar dia menunggu AuthContext selesai cek wallet
     }, [address, role, loading]);
 
     if (loading) return <p style={{ padding: '40px', textAlign: 'center' }}>Memverifikasi akses blockchain...</p>;
@@ -246,7 +233,6 @@ const loadRequests = async () => {
                 <p><strong>Wallet Anda:</strong> <code>{address}</code></p>
             </div>
 
-         {/* SEKSI 1: REQUEST MASUK */}
             <h3>🔔 Permintaan Akses</h3>
             {pendingDocs.length === 0 ? (
                 <p style={{ color: '#888', fontStyle: 'italic' }}>Tidak ada permintaan tertunda.</p>
@@ -339,52 +325,66 @@ const loadRequests = async () => {
                     </div>
                 ))
             )}
-            {/* SEKSI BARU: AI HERBAL RECOMMENDATION */}
             <div style={{ marginTop: '40px', padding: '20px', background: '#f0fff4', borderRadius: '15px', border: '2px solid #28a745' }}>
-                <h3>AI Rekomendasi Herbal (RAG + Rules)</h3>
-                <p style={{ fontSize: '0.9rem' }}>Pilih keluhan Anda agar sistem dapat menganalisis berdasarkan riwayat penyakit.</p>
+            <h3>AI Rekomendasi Herbal (Semantic RAG)</h3>
+            <p style={{ fontSize: '0.9rem' }}>Tuliskan keluhan Anda (misal: "susah tidur", "gula darah naik", "batuk berdahak").</p>
+            
+            <div style={{ position: 'relative', marginBottom: '10px' }}>
+                <textarea 
+                    placeholder="Tuliskan keluhan Anda di sini secara detail..." 
+                    value={keluhan}
+                    onChange={(e) => setKeluhan(e.target.value)} 
+                    style={{ 
+                        width: '100%', 
+                        height: '100px', 
+                        padding: '12px', 
+                        borderRadius: '8px', 
+                        border: '1px solid #ccc', 
+                        boxSizing: 'border-box',
+                        fontFamily: 'inherit'
+                    }}
+                />
+    
+                {isRecommending && <small style={{ color: '#28a745' }}>AI sedang menganalisis keluhan Anda...</small>}
+            </div>
                 
-                {/* CONTAINER INPUT & SUGGESTIONS */}
-                <div style={{ position: 'relative', marginBottom: '10px' }}>
-                    <input 
-                        type="text" 
-                        placeholder="Ketik keluhan Anda (misal: Gula, Darah, Tidur...)" 
-                        value={keluhan}
-                        onChange={(e) => handleSearchKeluhan(e.target.value)}
-                        onFocus={() => keluhan.length >= 3 && setShowSuggestions(true)}
-                        style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ccc', boxSizing: 'border-box' }}
-                    />
+                <div style={{ 
+                    marginBottom: '15px', 
+                    padding: '12px', 
+                    borderRadius: '10px', 
+                    background: useRag ? '#e8f5e9' : '#ffebee', // Background hijau muda jika ON, merah muda jika OFF
+                    border: `1px solid ${useRag ? '#2e7d32' : '#c62828'}`,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                }}>
+                    <div style={{ fontSize: '0.85rem' }}>
+                        <span style={{ fontWeight: 'bold', display: 'block' }}>
+                            {useRag ? "✅ Mode RAG Aktif (Database)" : "⚠️ Mode LLM Murni (Umum)"}
+                        </span>
+                        <span style={{ color: '#555' }}>
+                            {useRag ? "Akurasi tinggi berdasarkan data pakar." : "Berisiko halusinasi (tanpa data database)."}
+                        </span>
+                    </div>
                     
-                    {/* DROPDOWN SUGGESTIONS DARI CHROMADB */}
-                    {showSuggestions && suggestions.length > 0 && (
-                        <div style={{ 
-                            position: 'absolute', top: '100%', left: 0, right: 0, 
-                            background: 'white', border: '1px solid #ddd', borderRadius: '8px',
-                            boxShadow: '0 4px 6px rgba(0,0,0,0.1)', zIndex: 100, maxHeight: '200px', overflowY: 'auto' 
-                        }}>
-                            {suggestions.map((item, idx) => (
-                                <div 
-                                    key={idx}
-                                    onClick={() => {
-                                        setKeluhan(item.label); // Set teks yang tampil
-                                        setShowSuggestions(false); // Tutup dropdown
-                                    }}
-                                    style={{ 
-                                        padding: '10px 15px', cursor: 'pointer', borderBottom: '1px solid #eee',
-                                        fontSize: '0.9rem', hover: { background: '#f8f9fa' }
-                                    }}
-                                    onMouseEnter={(e) => e.target.style.background = '#f0f0f0'}
-                                    onMouseLeave={(e) => e.target.style.background = 'white'}
-                                >
-                                    {item.label}
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                    
-                    {isSearching && <small style={{ color: '#888' }}>Mencari saran medis...</small>}
+                    <button 
+                        onClick={() => setUseRag(!useRag)} // Pastikan Maria sudah buat: const [useRag, setUseRag] = useState(true);
+                        style={{
+                            padding: '8px 15px',
+                            borderRadius: '20px',
+                            border: 'none',
+                            cursor: 'pointer',
+                            background: useRag ? '#28a745' : '#dc3545',
+                            color: 'white',
+                            fontWeight: 'bold',
+                            fontSize: '0.75rem',
+                            transition: '0.3s'
+                        }}
+                    >
+                        {useRag ? "RAG: ON" : "RAG: OFF"}
+                    </button>
                 </div>
-                
+
                 <button 
                     onClick={handleGetAIRecommendation}
                     disabled={isRecommending || !keluhan}

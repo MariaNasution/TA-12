@@ -30,40 +30,35 @@ load_dotenv()
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
-client_icd = chromadb.PersistentClient(path="./db_icd10")
-model_ai_icd = embedding_functions.SentenceTransformerEmbeddingFunction(
-    model_name="all-MiniLM-L6-v2",
-    device="cpu"
-)
-collection_icd = client_icd.get_collection(name="master_icd10_v2", embedding_function=model_ai_icd)
+base_dir = os.path.dirname(os.path.abspath(__file__))
 
 # --- ENDPOINT UNTUK SMART SEARCH DROPDOWN (ICD-10) ---
-@app.route("/herbal/search-icd", methods=["GET"])
-def search_icd_api():
-    query = request.args.get("q", "")
-    if not query or len(query) < 3:
-        return jsonify([])
+# @app.route("/herbal/search-icd", methods=["GET"])
+# def search_icd_api():
+#     query = request.args.get("q", "")
+#     if not query or len(query) < 3:
+#         return jsonify([])
 
-    try:
-        # AI (Embedding) mencari 10 penyakit yang paling mirip maknanya
-        results = collection_icd.query(
-            query_texts=[query],
-            n_results=10
-        )
+#     try:
+#         # AI (Embedding) mencari 10 penyakit yang paling mirip maknanya
+#         results = collection_icd.query(
+#             query_texts=[query],
+#             n_results=10
+#         )
         
-        formatted_suggestions = []
-        if results and results['ids'] and results['ids'][0]:
-            for i in range(len(results['ids'][0])):
-                # Kita kirim Label (untuk tampilan) dan Value (Kodenya)
-                formatted_suggestions.append({
-                    "label": f"{results['ids'][0][i]} - {results['documents'][0][i]}",
-                    "value": results['ids'][0][i] 
-                })
+#         formatted_suggestions = []
+#         if results and results['ids'] and results['ids'][0]:
+#             for i in range(len(results['ids'][0])):
+#                 # Kita kirim Label (untuk tampilan) dan Value (Kodenya)
+#                 formatted_suggestions.append({
+#                     "label": f"{results['ids'][0][i]} - {results['documents'][0][i]}",
+#                     "value": results['ids'][0][i] 
+#                 })
         
-        return jsonify(formatted_suggestions)
-    except Exception as e:
-        print(f"❌ Error saat mencari di Chroma ICD: {e}")
-        return jsonify([]), 500
+#         return jsonify(formatted_suggestions)
+#     except Exception as e:
+#         print(f"❌ Error saat mencari di Chroma ICD: {e}")
+#         return jsonify([]), 500
 
 @app.route("/auth/login", methods=["POST"])
 def login_api():
@@ -237,20 +232,14 @@ def update_herbal(id):
         return jsonify({"status": "OK"}), 200
 
     try:
-        import chromadb
-        import os
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        db_path = os.path.join(base_dir, "chroma_db")
-        client = chromadb.PersistentClient(path=db_path)
-        collection = client.get_or_create_collection(name="herbal_collection")
-
+        # 1. Ambil data dari request
         data = request.json
         nama = data.get("name")
         indikasi = data.get("indikasi")
         kontraindikasi = data.get("kontraindikasi")
         deskripsi = data.get("deskripsi")
 
-        # --- 1. UPLOAD ULANG KE IPFS (Data Versi Baru) ---
+        # 2. Upload ulang ke IPFS untuk dapat CID baru
         herbal_metadata = {
             "name": nama,
             "indikasi": indikasi,
@@ -261,74 +250,81 @@ def update_herbal(id):
         new_ipfs_cid = upload_json_to_ipfs(herbal_metadata)
         print(f"✅ [UPDATE] IPFS Success: {new_ipfs_cid}")
 
-        full_text_update = f"Herbal: {nama}. Kegunaan: {indikasi}. Peringatan: {kontraindikasi}. Deskripsi: {deskripsi}"
+        # 3. KONEKSI KE CHROMADB (Pastikan koleksi didefinisikan di sini)
+        import chromadb
+        import os
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        db_path = os.path.join(base_dir, "chroma_db")
+        client = chromadb.PersistentClient(path=db_path)
+        
+        # Ambil koleksi herbal
+        target_collection = client.get_or_create_collection(name="herbal_collection")
 
-        # --- 2. UPDATE DI CHROMADB ---
-        collection.upsert(
+        # 4. Update di ChromaDB menggunakan .upsert()
+        full_text_update = f"Herbal: {nama}. Kegunaan: {indikasi}. Peringatan: {kontraindikasi}. Deskripsi: {deskripsi}"
+        
+        target_collection.upsert(
             ids=[id],
             metadatas=[{
-                "name": nama,
                 "nama": nama,
                 "indikasi": indikasi,
                 "kontraindikasi": kontraindikasi,
-                "ipfs_cid": new_ipfs_cid # Simpan CID baru di metadata
+                "ipfs_cid": new_ipfs_cid 
             }],
             documents=[full_text_update]
         )
-        print("✅ [UPDATE] ChromaDB Indexed")
+        print(f"✅ [UPDATE] ChromaDB Indexed untuk ID: {id}")
 
-        # --- 3. KIRIM KE BLOCKCHAIN ---
-        pk = os.getenv("SYSTEM_PRIVATE_KEY")
-        account = web3.eth.account.from_key(pk)
-        nonce = web3.eth.get_transaction_count(account.address)
-        
-        tx = contract.functions.storeHerbalData(new_ipfs_cid).build_transaction({
-            'from': account.address,
-            'nonce': nonce,
-            'gas': 500000,
-            'gasPrice': web3.to_wei('50', 'gwei')
-        })
-        
-        signed = web3.eth.account.sign_transaction(tx, pk)
-        raw_data = signed.raw_transaction if hasattr(signed, 'raw_transaction') else signed.rawTransaction
-        tx_hash = web3.eth.send_raw_transaction(raw_data)
-        new_tx_hash = web3.to_hex(tx_hash)
-        
-        print(f"✅ [UPDATE] Blockchain Success: {new_tx_hash}")
-        # -----------------------------------------------
-
-        print(f"\n✨ UPDATE SELESAI UNTUK: {nama}\n")
-        
+        # Return CID baru ke Frontend agar bisa di-TTD MetaMask
         return jsonify({
             "status": "Success",
-            "ipfs_cid": new_ipfs_cid,
-            "tx_hash": new_tx_hash
+            "ipfs_cid": new_ipfs_cid
         }), 200
 
     except Exception as e:
-        print(f"❌ Gagal Update Total: {e}")
+        print(f"❌ Gagal Update: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route("/herbal/recommendation-input", methods=["GET"])
 def recommendation_input():
     query = request.args.get("q", "").lower() 
     medical = request.args.get("medical", "")
+    use_rag = request.args.get("use_rag", "true").lower() == "true"
+    
     medical_list = [m.strip() for m in medical.split(",") if m.strip()]
 
-    # 1. RAG: Ambil semua kandidat berdasarkan keluhan (Sinonim keluhan diurus ChromaDB/Embedding)
-    herbs_from_rag = retrieve_relevant_herbs(query)
+    if use_rag:
+        # Jalankan Semantic Search
+        herbs_from_rag = retrieve_relevant_herbs(query)
+        
+        # JIKA DATA KOSONG (Bukan berarti Non-RAG, tapi emang gak ketemu di DB)
+        if not herbs_from_rag:
+            return jsonify({
+                "status": "warning",
+                "mode": "RAG (Database Kosong)",
+                "rekomendasi": [{
+                    "nama": "Informasi",
+                    "alasan": f"Maaf, tidak ada data herbal di database pakar yang relevan dengan keluhan '{query}'.",
+                    "status": "warning"
+                }]
+            })
 
-    if not herbs_from_rag:
-        return jsonify({"rekomendasi": [], "catatan": "Herbal tidak ditemukan."})
-
-    # 2. Kirim ke LLM Generator (Sinonim kontraindikasi diurus LoRA)
-    llm_input = {
-        "patient_context": {"keluhan": query, "kondisi_medis": medical_list},
-        "safe_herbs": herbs_from_rag 
-    }
+        llm_input = {
+            "mode": "RAG (Terverifikasi Database)",
+            "patient_context": {"keluhan": query, "kondisi_medis": medical_list},
+            "safe_herbs": herbs_from_rag 
+        }
+    else:
+        # Mode Non-RAG murni karena user mematikan fitur RAG di UI
+        llm_input = {
+            "mode": "Non-RAG (Pengetahuan Umum AI)",
+            "patient_context": {"keluhan": query, "kondisi_medis": medical_list},
+            "safe_herbs": [] 
+        }
 
     try:
         llm_output = generate_herbal_recommendation(llm_input)
+        llm_output["mode"] = llm_input["mode"] 
         return jsonify(llm_output)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -348,8 +344,6 @@ def get_medical_content():
     cid = request.args.get('cid')
     import requests
     try:
-        # Flask memanggil IPFS lokal (Port 5001 API)
-        # Jalur ini tidak akan kena blokir CORS oleh browser
         response = requests.post(f'http://127.0.0.1:5001/api/v0/cat?arg={cid}', timeout=5)
 
         return response.text, 200, {'Content-Type': 'application/json'}
@@ -385,8 +379,7 @@ def get_medical_list_api():
         import chromadb
         client = chromadb.PersistentClient(path="./chroma_db") 
         collection = client.get_or_create_collection(
-            name="medical_records",
-            embedding_function=model_ai_icd
+            name="medical_records"
         )
 
         results = collection.get()
@@ -533,7 +526,7 @@ def update_medical_record():
         }), 200
 
     except Exception as e:
-        print(f"❌ Error Update: {str(e)}")
+        print(f" Error Update: {str(e)}")
         return jsonify({"error": str(e)}), 500
     
 @app.route("/medical/delete-by-cid", methods=["DELETE"])
@@ -544,7 +537,7 @@ def delete_medical_by_cid():
     try:
         import chromadb
         client = chromadb.PersistentClient(path="./chroma_db")
-        collection = client.get_or_create_collection(name="medical_records", embedding_function=model_ai_icd)
+        collection = client.get_or_create_collection(name="medical_records")
         
         # Cari semua metadata milik pasien ini
         results = collection.get(where={"patient_address": patient_address})
