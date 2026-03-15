@@ -108,36 +108,54 @@ export default function DoctorDashboard() {
             const provider = new ethers.providers.Web3Provider(window.ethereum);
             const signer = provider.getSigner();
             const contract = new ethers.Contract(CONTRACT_ADDRESS, HEALTH_RECORD_ABI, signer);
-            
             const patientChecksum = ethers.utils.getAddress(patientAddr.toLowerCase().trim());
 
-            // A. Ambil index terbaru dari Blockchain
-            const records = await contract.getMedicalRecords(patientChecksum);
-            const nextIndex = records.length;
+            let currentCid = "";
 
-            // B. Kirim ke Flask (Di sini Semantic Ingest terjadi)
-            const response = await fetch(`http://127.0.0.1:5000/medical/store`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    diagnosis: medicalData, 
-                    patient_address: patientAddr,
-                    blockchain_index: nextIndex 
-                })
-            });
+            if (isEditMode) {
+                // JIKA MODE EDIT: Panggil API Update
+                const res = await fetch(`http://127.0.0.1:5000/medical/update`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        diagnosis: medicalData,
+                        patient_address: patientAddr,
+                        index: selectedRecordIndex
+                    })
+                });
+                const result = await res.json();
+                currentCid = result.ipfs_cid;
+            } else {
+                // JIKA DATA BARU: Ambil index dari blockchain
+                const records = await contract.getMedicalRecords(patientChecksum);
+                const nextIndex = records.length;
 
-            const result = await response.json();
-            if (!response.ok) throw new Error(result.error);
+                const res = await fetch(`http://127.0.0.1:5000/medical/store`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        diagnosis: medicalData,
+                        patient_address: patientAddr,
+                        blockchain_index: nextIndex
+                    })
+                });
+                const result = await res.json();
+                currentCid = result.ipfs_cid;
+            }
 
-            // C. Simpan CID IPFS ke Blockchain
-            const tx = await contract.storeMedicalRecord(patientChecksum, result.ipfs_cid);
+            // Tanda tangan ke Blockchain (Sertifikat bukti sah)
+            const tx = isEditMode 
+                ? await contract.updateMedicalRecord(patientChecksum, selectedRecordIndex, currentCid)
+                : await contract.storeMedicalRecord(patientChecksum, currentCid);
+            
             await tx.wait();
 
-            alert("✅ Diagnosa Berhasil Disimpan secara Semantik!");
+            alert(`Diagnosa Berhasil ${isEditMode ? 'Diperbarui' : 'Disimpan'}!`);
             setMedicalData('');
+            setIsEditMode(false);
             fetchMedicalHistory();
         } catch (error) {
-            alert(`Gagal: ${error.message}`);
+            alert("Gagal menyimpan: " + error.message);
         } finally {
             setTxLoading(false);
         }

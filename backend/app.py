@@ -378,63 +378,52 @@ def get_medical_list_api():
     try:
         import chromadb
         client = chromadb.PersistentClient(path="./chroma_db") 
-        collection = client.get_or_create_collection(
-            name="medical_records"
-        )
+        collection = client.get_or_create_collection(name="medical_records")
 
+        # CONTEK CARA HERBAL: Ambil semua data dari ChromaDB
         results = collection.get()
-        unique_patients = []
-        if results['metadatas']:
-            unique_patients = list(set([m.get('patient_address', '').lower() for m in results['metadatas']]))
         
-        history = []
-        for p_addr in unique_patients:
+        if not results['ids']:
+            return jsonify({"history": []}), 200
+
+        # Kita kelompokkan data berdasarkan alamat pasien
+        temp_history = {}
+
+        for i in range(len(results['ids'])):
+            meta = results['metadatas'][i]
+            p_addr = meta.get('patient_address', '').lower()
+            
+            # Verifikasi apakah dokter ini punya akses ke pasien tersebut di Blockchain
+            # (Ini opsional untuk kecepatan, tapi bagus untuk keamanan)
             try:
-                # --- 🛡️ PERBAIKAN 1: DEFINISIKAN CHECKSUM ---
                 p_checksum = web3.to_checksum_address(p_addr)
-                doctor_checksum = web3.to_checksum_address(doctor_login)
-
-                # Ambil data murni dari Blockchain
-                records = contract.functions.getMedicalRecords(p_checksum).call({
-                    "from": doctor_checksum 
-                })
+                doc_checksum = web3.to_checksum_address(doctor_login)
                 
-                formatted_records = []
-                for idx, rec in enumerate(records):
-                    # 1. Cek status aktif di blockchain (rec[3])
-                    if not rec[3]: 
-                        continue 
+                # Cek izin akses di Blockchain
+                has_access = contract.functions.checkAccess(p_checksum, doc_checksum).call()
+                if not has_access:
+                    continue # Skip jika dokter tidak punya izin lagi
+            except:
+                continue
 
-                    # 2. Cari teks diagnosa di AI
-                    current_diag = None
-                    for i, meta in enumerate(results['metadatas']):
-                        # --- 🛡️ PERBAIKAN 2: KONVERSI TIPE DATA KE INT ---
-                        meta_index = int(meta.get('index', -1))
-                        if meta.get('patient_address', '').lower() == p_addr.lower() and meta_index == idx:
-                            current_diag = results['documents'][i].replace("Kondisi Medis Pasien: ", "")
-                            break
-                    
-                    # Jika data di Blockchain Aktif tapi teks AI tidak ketemu, jangan skip barisnya, 
-                    # beri info agar kita bisa debug.
-                    if current_diag is None:
-                        current_diag = "[Sync Error] Teks AI tidak ditemukan untuk index ini"
+            if p_addr not in temp_history:
+                temp_history[p_addr] = []
 
-                    formatted_records.append({
-                        "diagnosis": current_diag,
-                        "timestamp": rec[1],
-                        "isActive": True,
-                        "index": idx,
-                        "cid": rec[0]
-                    })
-                
-                if formatted_records:
-                    history.append({"address": p_addr, "medicalRecords": formatted_records})
+            temp_history[p_addr].append({
+                "diagnosis": results['documents'][i].replace("Kondisi Medis Pasien: ", ""),
+                "timestamp": meta.get('timestamp', 0),
+                "isActive": True,
+                "index": meta.get('index'),
+                "cid": meta.get('ipfs_cid')
+            })
 
-            except Exception as e:
-                print(f"⚠️ Skip {p_addr} karena: {e}") # Sekarang 'p_checksum' sudah aman
-
+        # Format ulang agar sesuai dengan state 'patients' di React
+        history = [{"address": addr, "medicalRecords": recs} for addr, recs in temp_history.items()]
+        
         return jsonify({"history": history}), 200
+
     except Exception as e:
+        print(f"Error List Medical: {e}")
         return jsonify({"history": [], "error": str(e)}), 200
 
 @app.route("/medical/store", methods=["POST", "OPTIONS"])
