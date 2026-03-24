@@ -19,27 +19,36 @@ export const AuthProvider = ({ children }) => {
                 address: currentAddress.toLowerCase() 
             });
             
-            const userRole = response.data.role; 
-            setUser({ address: currentAddress, role: userRole });
+            // Ambil DATA LENGKAP dari backend
+            const { role, status, name } = response.data; 
+
+            setUser({ address: currentAddress, role: role, userName: name, status: status });
 
             // --- LOGIKA NAVIGASI (DIPERBARUI) ---
-            if (userRole === 'herbal_doctor') {
+            
+            // 1. CEK STATUS PENDING DULU (Kunci pintu paling depan)
+            if (status === 'pending_approval') {
+                console.log("DEBUG: Akun masih pending. Ke halaman verifikasi...");
+                router.push('/pending-verification');
+                return; // Berhenti di sini, jangan lanjut ke bawah!
+            }
+
+            // 2. JIKA SUDAH APPROVED, BARU ARAHKAN SESUAI ROLE
+            if (role === 'herbal_doctor') {
                 router.push('/herbs/dashboard');
-            } else if (userRole === 'doctor') {
+            } else if (role === 'doctor') {
                 router.push('/doctor/dashboard');
-            } else if (userRole === 'patient') {
+            } else if (role === 'patient') {
                 router.push('/patient/dashboard');
-            } else if (userRole === 'admin') {
+            } else if (role === 'admin') {
                 router.push('/admin/dashboard');
-            } else if (userRole === 'none') {
-                // Jika belum daftar, redirect ke register
+            } else if (role === 'none') {
                 console.log("User belum terdaftar, mengarahkan ke registrasi...");
                 router.push('/register');
             }
             
         } catch (error) {
             console.error("Login Error:", error);
-            // Jika backend Flask kirim error 404 (Alamat belum terdaftar)
             if (error.response && error.response.status === 404) {
                 setUser({ address: currentAddress, role: 'none' });
                 router.push('/register');

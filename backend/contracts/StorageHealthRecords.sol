@@ -41,8 +41,12 @@ contract StorageHealthRecords {
     // 2. STORAGE (Penyimpanan State)
     // =====================
 
-    mapping(address => string) public patientNames; // Nama untuk Pasien
-    mapping(address => DoctorProfile) public doctors; // Profil lengkap Dokter
+    mapping(address => string) public patientNames; 
+    mapping(address => DoctorProfile) public doctors; 
+    
+    address[] public allUserAddresses;
+    mapping(address => bool) public hasRegistered;  
+    address[] public doctorAddresses;
     
     mapping(address => mapping(address => bool)) public pendingRequests;
     mapping(address => MedicalRecord[]) private medicalRecords;
@@ -54,26 +58,60 @@ contract StorageHealthRecords {
     // 3. IDENTITY & REGISTRATION
     // =====================
 
-    // Dokter mendaftar (Status awal: Belum disetujui admin)
+    // Registrasi Dokter
     function registerDoctor(string memory _name, string memory _specialty) public {
         require(!doctors[msg.sender].isRegistered, "Sudah terdaftar");
+        
         doctors[msg.sender] = DoctorProfile(_name, _specialty, false, true);
+        
+        if (!hasRegistered[msg.sender]) {
+            allUserAddresses.push(msg.sender);
+            hasRegistered[msg.sender] = true;
+        }
+        
+        doctorAddresses.push(msg.sender);
     }
 
-    // Pasien mendaftar nama saja
     function registerPatient(string memory _name) public {
+        require(bytes(_name).length > 0, "Nama tidak boleh kosong");
         patientNames[msg.sender] = _name;
+        
+        if (!hasRegistered[msg.sender]) {
+            allUserAddresses.push(msg.sender);
+            hasRegistered[msg.sender] = true;
+        }
     }
 
-    // Admin menyetujui Dokter (Supaya bisa input data herbal/medis)
+    // Admin menyetujui Dokter
     function approveDoctor(address _doctor) public onlyAdmin {
         require(doctors[_doctor].isRegistered, "Dokter belum mendaftar");
         doctors[_doctor].isApproved = true;
         verifiedDoctor[_doctor] = true; 
     }
 
+    // Fungsi Reject Dokter (PENTING untuk selaras dengan tombol hapus admin)
+    function rejectDoctor(address _doctor) public onlyAdmin {
+        require(doctors[_doctor].isRegistered, "Dokter tidak terdaftar");
+        require(!doctors[_doctor].isApproved, "Tidak bisa hapus dokter yang sudah disetujui");
+        
+        delete doctors[_doctor];
+        verifiedDoctor[_doctor] = false;
+    }
+
     // =====================
-    // 4. MEDICAL ACCESS (REJECT & REVOKE)
+    // 4. GETTER UNTUK ADMIN (SELARAS DENGAN DASHBOARD)
+    // =====================
+
+    function getAllUsers() public view returns (address[] memory) {
+        return allUserAddresses;
+    }
+
+    function getDoctorAddresses() public view returns (address[] memory) {
+        return doctorAddresses;
+    }
+
+    // =====================
+    // 5. MEDICAL ACCESS
     // =====================
 
     function checkAccess(address _patient, address _doctor) public view returns (bool) {
@@ -84,25 +122,22 @@ contract StorageHealthRecords {
         pendingRequests[_patient][msg.sender] = true;
     }
 
-    // Pasien menolak permintaan yang masuk
     function rejectAccess(address _doctor) public {
         require(pendingRequests[msg.sender][_doctor], "No pending request");
         pendingRequests[msg.sender][_doctor] = false;
     }
 
-    // Pasien memberikan izin (Otomatis hapus dari pending)
     function grantAccess(address _doctor) public {
         pendingRequests[msg.sender][_doctor] = false;
         accessPermission[msg.sender][_doctor] = true;
     }
 
-    // Pasien mencabut izin yang sudah ada
     function revokeAccess(address _doctor) public {
         accessPermission[msg.sender][_doctor] = false;
     }
 
     // =====================
-    // 5. DATA MANAGEMENT
+    // 6. DATA MANAGEMENT
     // =====================
 
     function storeMedicalRecord(address _patient, string memory _cid) public {
@@ -116,25 +151,21 @@ contract StorageHealthRecords {
     }
 
     function deactivateMedicalRecord(address _patient, uint256 _index) public {
-        // Validasi dasar
         require(_index < medicalRecords[_patient].length, "Index tidak valid");
-        
-        // Pastikan yang menghapus adalah dokter yang membuat data tersebut
         require(
             msg.sender == medicalRecords[_patient][_index].createdBy,
             "Hanya dokter pembuat yang bisa menonaktifkan"
         );
-
         medicalRecords[_patient][_index].isActive = false;
     }
 
     function getMedicalRecords(address _patient) public view returns (MedicalRecord[] memory) {
-    require(
-        msg.sender == _patient || accessPermission[_patient][msg.sender],
-        "Access denied"
-    );
-    return medicalRecords[_patient];
-}
+        require(
+            msg.sender == _patient || accessPermission[_patient][msg.sender],
+            "Access denied"
+        );
+        return medicalRecords[_patient];
+    }
 
     function storeHerbalData(string memory _cid) public {
         require(verifiedDoctor[msg.sender] && doctors[msg.sender].isApproved, "Doctor not approved");

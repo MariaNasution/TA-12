@@ -8,7 +8,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CHROMA_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "chroma_db"))
 
 embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
-    model_name="all-MiniLM-L6-v2"
+    model_name="intfloat/multilingual-e5-large"
 )
 
 
@@ -23,8 +23,14 @@ collection = chroma_client.get_or_create_collection(
 
 
 def add_medical_to_chroma(record_id, patient_address, diagnosis, ipfs_cid, index):
-    # Buat atau ambil koleksi khusus rekam medis
-    # Kita pakai chroma_client yang sudah ada di atas file kamu
+    # 1. Hapus dulu koleksi lama yang bermasalah (HANYA JALANKAN SEKALI/SAAT ERROR)
+    # try:
+    #     chroma_client.delete_collection(name="medical_records")
+    #     print("🧹 [ChromaDB] Koleksi lama dihapus untuk reset embedding.")
+    # except:
+    #     print("ℹ️ [ChromaDB] Koleksi belum ada, lanjut membuat baru.")
+
+    # 2. Buat ulang koleksi dengan konfigurasi yang benar
     medical_coll = chroma_client.get_or_create_collection(
         name="medical_records",
         embedding_function=embedding_function
@@ -42,9 +48,8 @@ def add_medical_to_chroma(record_id, patient_address, diagnosis, ipfs_cid, index
     )
     print(f"✅ [ChromaDB] Berhasil simpan riwayat medis: {record_id}")
     
-def add_herbal(name, indikasi, kontraindikasi, cid, content):
-    doc_id = f"herb_{name.lower().replace(' ', '_')}"
-
+def add_herbal(name, indikasi, kontraindikasi, cid, content, doctor_address):
+    doc_id = f"herb_{name.lower().replace(' ', '_')}_{doctor_address.lower()[:6]}"
     full_text_for_embedding = (
         f"Herbal: {name}. "
         f"Kegunaan dan Indikasi: {indikasi}. "
@@ -66,7 +71,8 @@ def add_herbal(name, indikasi, kontraindikasi, cid, content):
             "indikasi": indikasi,
             "kontraindikasi": kontraindikasi,
             "ipfs_cid": cid,
-            "deskripsi": content
+            "deskripsi": content,
+            "doctor_address": doctor_address.lower()
         }]
     )
 def search_herbal(query, n_results=3):
@@ -81,7 +87,7 @@ def search_herbal(query, n_results=3):
 
     return collection.query(
         query_texts=[query],
-        n_results=n_results
+        n_results=n_results,
     )
 def count_herbal():
     return collection.count()

@@ -1,96 +1,116 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import Sidebar from '../../components/Sidebar';
+import BerandaAdmin from './BerandaAdmin';
+import { useAuth } from '../../context/AuthContext';
 import { ethers } from 'ethers';
 import { CONTRACT_ADDRESS, HEALTH_RECORD_ABI } from '../../api/contract_abi';
 
 export default function AdminDashboard() {
-    const [pendingDoctors, setPendingDoctors] = useState([]);
-    const [loading, setLoading] = useState(true);
+  const { address, role, loading: authLoading } = useAuth();
+  const [activeTab, setActiveTab] = useState('dashboard');
+  
+  // State Data sesuai Gambar 1 & 2
+  const [adminData, setAdminData] = useState({
+    stats: { total_pengguna: 0, pending_verif: 0, pasien: 0, dokter_medis: 0, dokter_herbal: 0 },
+    pending_registrations: []
+  });
 
+  const [isLoading, setIsLoading] = useState(true);
 
-    useEffect(() => {
-        loadPendingDoctors();
-    }, []);
+  // --- FUNGSI AMBIL DATA DARI BLOCKCHAIN (VIA FLASK) ---
+  const fetchAdminStats = useCallback(async () => {
+    try {
+      // Endpoint ini memanggil getAllUsers() di Smart Contract
+      const res = await fetch("http://localhost:5000/admin/dashboard/stats");
+      const data = await res.json();
+      
+      if (data.status === "success") {
+        setAdminData({
+          stats: data.stats,
+          pending_registrations: data.pending_registrations
+        });
+      }
+    } catch (err) {
+      console.error("❌ Gagal tarik data Blockchain:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
-    const loadPendingDoctors = async () => {
-        try {
-            const provider = new ethers.providers.Web3Provider(window.ethereum);
-            // Ambil SEMUA akun yang terhubung ke provider (Ganache)
-            const allAccounts = await provider.listAccounts(); 
-            const contract = new ethers.Contract(CONTRACT_ADDRESS, HEALTH_RECORD_ABI, provider);
+  // Auto Reload saat pertama masuk atau pindah tab
+  useEffect(() => {
+    if (!authLoading && role === 'admin') {
+      fetchAdminStats();
+    }
+  }, [authLoading, role, activeTab, fetchAdminStats]);
 
-            const pending = [];
-            for (let addr of allAccounts) {
-                const info = await contract.doctors(addr);
-                // info[3] = isRegistered, info[2] = isApproved
-                if (info.isRegistered && !info.isApproved) {
-                    pending.push({
-                        address: addr,
-                        name: info.name,
-                        specialty: info.specialty
-                    });
-                }
-            }
-            setPendingDoctors(pending);
-        } catch (err) {
-            console.error("Gagal load daftar dokter:", err);
-        } finally {
-            setLoading(false);
-        }
-    };
+  // --- HANDLE APPROVE (BLOCKCHAIN TRANSACTION) ---
+  const handleApprove = async (targetAddr, name) => {
+    try {
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const signer = provider.getSigner();
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, HEALTH_RECORD_ABI, signer);
 
-    const handleApprove = async (addr) => {
-        try {
-            const provider = new ethers.providers.Web3Provider(window.ethereum);
-            const signer = provider.getSigner();
-            const contract = new ethers.Contract(CONTRACT_ADDRESS, HEALTH_RECORD_ABI, signer);
+      console.log(`⏳ Memproses Approve untuk ${name}...`);
+      const tx = await contract.approveDoctor(targetAddr);
+      await tx.wait(); // Tunggu konfirmasi Blockchain
 
-            const tx = await contract.approveDoctor(addr);
-            await tx.wait();
-            alert("✅ Dokter Berhasil Disetujui!");
-            loadPendingDoctors(); // Refresh daftar
-        } catch (error) {
-            alert("Gagal: " + error.message);
-        }
-    };
+      alert(`Berhasil! pendaftarab akun telah disetujui.`);
+      fetchAdminStats(); // Refresh tampilan otomatis
+    } catch (error) {
+      alert("Gagal Approve: " + error.message);
+    }
+  };
 
-    return (
-        <div style={{ padding: '40px', fontFamily: 'Arial' }}>
-            <h1>👨‍✈️ Dashboard Admin</h1>
-            <h3>Daftar Pengajuan Dokter (Pending)</h3>
-            
-            {loading ? <p>Memuat data blockchain...</p> : (
-                <table border="1" cellPadding="10" style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                        <tr style={{ background: '#eee' }}>
-                            <th>Nama</th>
-                            <th>Spesialisasi</th>
-                            <th>Alamat Wallet</th>
-                            <th>Aksi</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {pendingDoctors.length === 0 ? (
-                            <tr><td colSpan="4" style={{ textAlign: 'center' }}>Tidak ada pengajuan baru.</td></tr>
-                        ) : (
-                            pendingDoctors.map((doc, index) => (
-                                <tr key={index}>
-                                    <td>{doc.name}</td>
-                                    <td>{doc.specialty}</td>
-                                    <td><code>{doc.address}</code></td>
-                                    <td>
-                                        <button 
-                                            onClick={() => handleApprove(doc.address)}
-                                            style={{ background: '#28a745', color: '#fff', border: 'none', padding: '5px 15px', cursor: 'pointer', borderRadius: '4px' }}
-                                        >
-                                            Setujui (Approve)
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))
-                        )}
-                    </tbody>
-                </table>
-            )}
-        </div>
-    );
+  // --- HANDLE REJECT (BLOCKCHAIN TRANSACTION) ---
+  const handleReject = async (targetAddr, name) => {
+    if (!window.confirm(`Tolak dan hapus pendaftaran dr. ${name}?`)) return;
+
+    try {
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const signer = provider.getSigner();
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, HEALTH_RECORD_ABI, signer);
+
+      console.log(`⏳ Memproses Reject untuk ${name}...`);
+      // Memanggil fungsi rejectDoctor baru di .sol
+      const tx = await contract.rejectDoctor(targetAddr);
+      await tx.wait();
+
+      alert(`❌ Pendaftaran dr. ${name} telah dihapus dari Blockchain.`);
+      fetchAdminStats(); // Refresh tampilan otomatis
+    } catch (error) {
+      alert("Gagal Reject: " + error.message);
+    }
+  };
+
+  if (authLoading || isLoading) return <div className="loading">Memuat Data Blockchain...</div>;
+
+  return (
+    <div className="admin-layout">
+      <Sidebar 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+        notifications={{ pendingVerifCount: adminData.stats.pending_verif }} 
+      />
+      
+      <main className="admin-main">
+        {activeTab === 'dashboard' && (
+          <BerandaAdmin 
+            stats={adminData.stats} 
+            pendingList={adminData.pending_registrations}
+            onApprove={handleApprove}
+            onReject={handleReject}
+          />
+        )}
+        
+        {activeTab === 'verifikasi' && <div className="p-20">Halaman Verifikasi Lengkap...</div>}
+      </main>
+
+      <style jsx>{`
+        .admin-layout { display: flex; background: #fcfcfc; min-height: 100vh; }
+        .admin-main { margin-left: 260px; flex: 1; padding: 30px 40px; }
+        .loading { display: flex; justify-content: center; align-items: center; height: 100vh; font-weight: 600; color: #2e7d32; }
+      `}</style>
+    </div>
+  );
 }
