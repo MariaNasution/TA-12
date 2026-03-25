@@ -1,77 +1,107 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { useWeb3ModalAccount } from '@web3modal/ethers5/react';
-import { useRouter } from 'next/router'; // 1. Import router
-import axios from 'axios';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { useWeb3ModalAccount, useWeb3Modal } from '@web3modal/ethers5/react';
+import { useRouter } from 'next/router';
 
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
     const { address, isConnected } = useWeb3ModalAccount();
-    const [user, setUser] = useState({ address: null, role: null });
+    const { open } = useWeb3Modal();
+    const [user, setUser] = useState({ address: null, role: null, userName: null, status: null });
     const [loading, setLoading] = useState(false);
-    const router = useRouter(); // 2. Inisialisasi router
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const router = useRouter();
+    const prevAddressRef = useRef(null);
 
-    const checkRole = async (currentAddress) => {
-        if (!currentAddress) return;
-        setLoading(true);
+    const connectWallet = async () => {
         try {
-            const response = await axios.post('http://127.0.0.1:5000/auth/login', { 
-                address: currentAddress.toLowerCase() 
-            });
-            
-            // Ambil DATA LENGKAP dari backend
-            const { role, status, name } = response.data; 
-
-            setUser({ address: currentAddress, role: role, userName: name, status: status });
-
-            // --- LOGIKA NAVIGASI (DIPERBARUI) ---
-            
-            // 1. CEK STATUS PENDING DULU (Kunci pintu paling depan)
-            if (status === 'pending_approval') {
-                console.log("DEBUG: Akun masih pending. Ke halaman verifikasi...");
-                router.push('/pending-verification');
-                return; // Berhenti di sini, jangan lanjut ke bawah!
-            }
-
-            // 2. JIKA SUDAH APPROVED, BARU ARAHKAN SESUAI ROLE
-            if (role === 'herbal_doctor') {
-                router.push('/herbs/dashboard');
-            } else if (role === 'doctor') {
-                router.push('/doctor/dashboard');
-            } else if (role === 'patient') {
-                router.push('/patient/dashboard');
-            } else if (role === 'admin') {
-                router.push('/admin/dashboard');
-            } else if (role === 'none') {
-                console.log("User belum terdaftar, mengarahkan ke registrasi...");
-                router.push('/register');
-            }
-            
+            await open();
         } catch (error) {
-            console.error("Login Error:", error);
-            if (error.response && error.response.status === 404) {
-                setUser({ address: currentAddress, role: 'none' });
-                router.push('/register');
-            } else {
-                setUser({ address: null, role: null });
-                router.push('/'); 
-            }
-        } finally {
-            setLoading(false);
+            console.error("Wallet connection error:", error);
         }
     };
 
-    // ... useEffect tetap sama ...
+    // Login penuh (Wallet + Password) — dipanggil dari halaman /login
+    const loginWithPassword = async (walletAddress, password) => {
+        try {
+            const response = await fetch('http://127.0.0.1:5000/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ address: walletAddress, password })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                const userRole = data.role;
+                setUser({ address: walletAddress, role: userRole, userName: data.name, status: data.status });
+                setIsAuthenticated(true);
+
+                // Navigasi berdasarkan role
+                if (data.status === 'pending_approval') {
+                    router.push('/pending-verification');
+                    return { success: true, data };
+                }
+
+                if (userRole === 'herbal_doctor') {
+                    router.push('/herbs/dashboard');
+                } else if (userRole === 'doctor') {
+                    router.push('/doctor/dashboard');
+                } else if (userRole === 'patient') {
+                    router.push('/patient/dashboard');
+                } else if (userRole === 'admin') {
+                    router.push('/admin/dashboard');
+                }
+                return { success: true, data };
+            } else {
+                return { success: false, error: data.error || data.message };
+            }
+        } catch (error) {
+            console.error("Login Error:", error);
+            return { success: false, error: error.message };
+        }
+    };
+
+    // Deteksi pergantian akun MetaMask → reset auth dan redirect ke /register
     useEffect(() => {
         if (isConnected && address) {
-            checkRole(address);
+            if (prevAddressRef.current && prevAddressRef.current !== address) {
+                // Akun MetaMask berubah → reset state dan redirect ke register
+                console.log('🔄 MetaMask account changed, redirecting to /register');
+                setUser({ address: address, role: null });
+                setIsAuthenticated(false);
+                router.push('/register');
+            } else {
+                // Set address awal
+                setUser(prev => ({ ...prev, address: address }));
+            }
+            prevAddressRef.current = address;
         } else if (!isConnected) {
-            setUser({ address: null, role: null });
+            setUser({ address: null, role: null, userName: null, status: null });
+            setIsAuthenticated(false);
+            prevAddressRef.current = null;
         }
     }, [isConnected, address]);
 
+    // Saat wallet terhubung dan di halaman utama, arahkan ke register
+    useEffect(() => {
+        if (isConnected && address && !isAuthenticated) {
+            const currentPath = router.pathname;
+            if (currentPath === '/') {
+                router.push('/register');
+            }
+        }
+    }, [isConnected, address, isAuthenticated]);
+
     return (
-        <AuthContext.Provider value={{ ...user, isConnected, loading }}>
+        <AuthContext.Provider value={{ 
+            ...user, 
+            isConnected, 
+            loading, 
+            isAuthenticated,
+            connectWallet, 
+            loginWithPassword 
+        }}>
             {children}
         </AuthContext.Provider>
     );

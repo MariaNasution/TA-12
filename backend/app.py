@@ -1,4 +1,5 @@
 import os
+import sys
 from datetime import datetime
 from flask import Flask, request, jsonify
 import chromadb
@@ -25,6 +26,7 @@ from flask_cors import CORS
 from dotenv import load_dotenv 
 from datetime import datetime
 import mysql.connector
+from werkzeug.security import generate_password_hash, check_password_hash
 import json
 import time
 from datetime import datetime
@@ -82,9 +84,10 @@ def get_db_connection():
     return mysql.connector.connect(
         host="localhost",
         user="root",
-        password="", 
+        password="root", 
         database="ta",
-        port=3306
+        port=3306,
+        collation="utf8mb4_general_ci"
     )
 def save_recommendation_to_sql(address, keluhan, hasil_ai, mode):
     print("\n[DIAGNOSA SQL] Memulai proses simpan...")
@@ -140,54 +143,92 @@ def mark_read():
 def login_api():
     data = request.json
     try:
-        # 1. Validasi & Konversi ke Checksum Address
         address = web3.to_checksum_address(data.get("address"))
     except Exception:
         return jsonify({"error": "Format alamat wallet tidak valid"}), 400
-    
+
+    password = data.get("password")
     print(f"DEBUG: Upaya Login -> {address}")
 
-    # A. CEK ADMIN (Pemilik Kontrak)
+    # --- 0. CEK ADMIN (Pemilik Kontrak) — Admin bypass password ---
+    try:
+        contract_admin = contract.functions.admin().call()
+    except Exception as e:
+        print(f"❌ Kesalahan Kritis Smart Contract: {e}")
+        return jsonify({
+            "error": "Gagal membaca Smart Contract di jaringan ini.",
+            "message": "Pastikan Anda sudah menjalankan 'truffle migrate --reset' di terminal dan memperbarui CONTRACT_ADDRESS di .env"
+        }), 500
 
-    contract_admin = contract.functions.admin().call()
     if address == contract_admin:
         return jsonify({
-            "role": "admin", 
-            "status": "active", 
+            "role": "admin",
+            "status": "active",
             "name": "Admin Sistem"
         }), 200
 
+    # --- 1. VERIFIKASI PASSWORD DI DATABASE MYSQL ---
+    if not password:
+        return jsonify({"error": "Password harus diisi"}), 400
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT password_hash FROM user_auth WHERE wallet_address = %s", (address,))
+        user_record = cursor.fetchone()
+
+        if not user_record:
+            cursor.close()
+            conn.close()
+            return jsonify({
+                "role": "none",
+                "error": "Wallet belum terdaftar.",
+                "message": "Silakan registrasi terlebih dahulu."
+            }), 404
+
+        if not check_password_hash(user_record['password_hash'], password):
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "Password salah"}), 401
+
+        # Update last login
+        cursor.execute("UPDATE user_auth SET last_login = %s WHERE wallet_address = %s", (datetime.now(), address))
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        print(f"❌ Database Error: {e}")
+        return jsonify({"error": "Gagal verifikasi basis data"}), 500
+
+    # --- 2. CEK ROLE DI BLOCKCHAIN (Sama seperti alur lama) ---
     # B. CEK DOKTER (Medis & Herbal)
     doctor_info = contract.functions.doctors(address).call()
-    
-    if doctor_info[3]:  # Jika isRegistered == True
-        # CEK APPROVAL: Syarat mutlak login untuk semua dokter
-        if doctor_info[2]:  # Jika isApproved == True
-            role = "doctor" 
-            # Pembedaan role berdasarkan spesialisasi yang dipilih saat daftar
+
+    if doctor_info[3]:  # isRegistered
+        if doctor_info[2]:  # isApproved
+            role = "doctor"
             if "herbal" in doctor_info[1].lower():
                 role = "herbal_doctor"
-                
+
             return jsonify({
-                "role": role, 
-                "name": doctor_info[0], 
+                "role": role,
+                "name": doctor_info[0],
                 "specialty": doctor_info[1],
                 "status": "approved"
             }), 200
         else:
-            # DOKTER TERDAFTAR TAPI BELUM DI-APPROVE ADMIN
             return jsonify({
-                "role": "doctor", 
-                "status": "pending_approval", 
-                "message": "Akun Dokter Anda sedang menunggu verifikasi Admin. Silakan hubungi admin untuk aktivasi."
+                "role": "doctor",
+                "status": "pending_approval",
+                "message": "Akun Dokter Anda sedang menunggu verifikasi Admin."
             }), 202
 
     # C. CEK PASIEN
     patient_name = contract.functions.patientNames(address).call()
     if patient_name != "" and patient_name is not None:
         return jsonify({
-            "role": "patient", 
-            "name": patient_name, 
+            "role": "patient",
+            "name": patient_name,
             "status": "active"
         }), 200
 
@@ -196,7 +237,54 @@ def login_api():
         "role": "none",
         "error": "Alamat wallet belum terdaftar di Blockchain.",
         "message": "Silakan masuk ke halaman Registrasi terlebih dahulu."
-    }), 404 
+    }), 404
+
+
+@app.route("/auth/register", methods=["POST"])
+def register_api():
+    data = request.json
+    try:
+        address = web3.to_checksum_address(data.get("address"))
+    except Exception:
+        return jsonify({"error": "Format alamat wallet tidak valid"}), 400
+
+    password = data.get("password")
+    role = data.get("role", "patient")
+
+    if not password:
+        return jsonify({"error": "Password harus diisi"}), 400
+
+    print(f"DEBUG: Registrasi baru -> {address} ({role})")
+
+    try:
+        # --- 1. SIMPAN PASSWORD KE MYSQL ---
+        hashed_pw = generate_password_hash(password)
+
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        # Cek duplikasi di DB
+        cursor.execute("SELECT wallet_address FROM user_auth WHERE wallet_address = %s", (address,))
+        if cursor.fetchone():
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "Wallet sudah terdaftar di basis data"}), 409
+
+        cursor.execute("INSERT INTO user_auth (wallet_address, password_hash) VALUES (%s, %s)", (address, hashed_pw))
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            "status": "success",
+            "message": "Password tersimpan. Silakan selesaikan transaksi blockchain.",
+            "address": address,
+            "role": role
+        }), 200
+
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/admin/dashboard/stats", methods=["GET"])
 def get_admin_dashboard_stats():
@@ -879,7 +967,7 @@ def patient_request_recommendation():
             "keluhan": keluhan, 
             "kondisi_medis": list(set(medical_conditions)) 
         },
-        "safe_herbs": retrieve_relevant_herbs(expand_query_internal(keluhan)) 
+        "safe_herbs": retrieve_relevant_herbs(keluhan) 
     }
     
     return jsonify(generate_herbal_recommendation(llm_input))
@@ -956,9 +1044,11 @@ def store_herbal_api():
 @app.route("/doctor/request-access", methods=["POST"])
 def doctor_request_access_api():
     data = request.json
+    doctor_name = data.get("doctor_name", "Dokter")
+    patient_address = data.get("patient_address")
     tx_hash = request_access_from_doctor(
         data["doctor_private_key"],
-        data["patient_address"]
+        patient_address
     )
     pesan = f"dr. {doctor_name} meminta izin untuk mengakses rekam medis Anda."
     add_notification(patient_address, pesan)

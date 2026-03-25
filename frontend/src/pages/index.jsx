@@ -1,9 +1,11 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '../context/AuthContext';
+import { useWeb3Modal } from '@web3modal/ethers5/react';
 
 export default function HomePage() {
-  const { address, role, isConnected, loading, connectWallet } = useAuth();
+  const { address, role, isConnected, loading } = useAuth();
+  const { open } = useWeb3Modal();
   const router = useRouter();
 
   useEffect(() => {
@@ -30,7 +32,7 @@ export default function HomePage() {
         <div style={{ marginTop: '20px' }}>
           <p>Selamat Datang. Silakan hubungkan dompet MetaMask Anda.</p>
           <button 
-            onClick={connectWallet}
+            onClick={() => open()}
             style={{ padding: '15px 30px', fontSize: '1.1rem', background: '#0070f3', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
           >
             Hubungkan Wallet
@@ -38,8 +40,7 @@ export default function HomePage() {
         </div>
       ) : (
         <div>
-          <p>⌛ Memverifikasi identitas Anda di Blockchain...</p>
-          {}
+          <p>⌛ Mengarahkan ke halaman registrasi...</p>
         </div>
       )}
     </div>
