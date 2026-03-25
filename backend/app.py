@@ -24,6 +24,10 @@ from chroma.herbal_store import embedding_functions
 from flask_cors import CORS
 from dotenv import load_dotenv 
 from datetime import datetime
+import mysql.connector
+import json
+import time
+from datetime import datetime
 
 
 load_dotenv()
@@ -32,33 +36,105 @@ app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
 base_dir = os.path.dirname(os.path.abspath(__file__))
 
-# --- ENDPOINT UNTUK SMART SEARCH DROPDOWN (ICD-10) ---
-# @app.route("/herbal/search-icd", methods=["GET"])
-# def search_icd_api():
-#     query = request.args.get("q", "")
-#     if not query or len(query) < 3:
-#         return jsonify([])
+@app.route("/notifications/log-event", methods=["POST"])
+def log_event():
+    data = request.json
+    patient_address = data.get("address")
+    pesan = data.get("pesan")
+    
+    if not patient_address or not pesan:
+        return jsonify({"status": "error", "message": "Data tidak lengkap"}), 400
 
-#     try:
-#         # AI (Embedding) mencari 10 penyakit yang paling mirip maknanya
-#         results = collection_icd.query(
-#             query_texts=[query],
-#             n_results=10
-#         )
-        
-#         formatted_suggestions = []
-#         if results and results['ids'] and results['ids'][0]:
-#             for i in range(len(results['ids'][0])):
-#                 # Kita kirim Label (untuk tampilan) dan Value (Kodenya)
-#                 formatted_suggestions.append({
-#                     "label": f"{results['ids'][0][i]} - {results['documents'][0][i]}",
-#                     "value": results['ids'][0][i] 
-#                 })
-        
-#         return jsonify(formatted_suggestions)
-#     except Exception as e:
-#         print(f"❌ Error saat mencari di Chroma ICD: {e}")
-#         return jsonify([]), 500
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        # Masukkan ke tabel notifications
+        query = "INSERT INTO notifications (address, pesan, is_read, tanggal) VALUES (%s, %s, FALSE, NOW())"
+        cursor.execute(query, (patient_address.lower(), pesan))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({"status": "success", "message": "Log berhasil dicatat"})
+    except Exception as e:
+        print(f"Error Logging: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+    
+@app.route("/notifications/add", methods=["POST"])
+def add_notif_api():
+    data = request.json
+    add_notification(data['address'], data['pesan']) 
+    return jsonify({"status": "success"})
+
+def add_notification(address, pesan):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        query = "INSERT INTO notifications (address, pesan, is_read, tanggal) VALUES (%s, %s, FALSE, NOW())"
+        cursor.execute(query, (address.lower(), pesan))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        print(f"DEBUG: Notif berhasil dikirim ke {address}")
+    except Exception as e:
+        print(f"ERROR Notif: {e}")
+
+def get_db_connection():
+    return mysql.connector.connect(
+        host="localhost",
+        user="root",
+        password="", 
+        database="ta",
+        port=3306
+    )
+def save_recommendation_to_sql(address, keluhan, hasil_ai, mode):
+    print("\n[DIAGNOSA SQL] Memulai proses simpan...")
+    if not address: print("[!] ERROR: Address kosong"); return
+    if not keluhan: print("[!] ERROR: Keluhan kosong"); return
+    if not hasil_ai: print("[!] ERROR: Hasil AI kosong"); return
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        print(f" -> Target Address: {address}")
+        print(f" -> Keluhan: {keluhan[:30]}...")
+        query = "INSERT INTO riwayat_rekomendasi (address, keluhan, hasil_ai, mode) VALUES (%s, %s, %s, %s)"
+        cursor.execute(query, (address.lower(), keluhan, json.dumps(hasil_ai), mode))
+        conn.commit()
+        print("[SUCCESS] Data berhasil masuk ke SQLyog!")
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        print(f"Error Save Rec: {e}")
+
+@app.route("/notifications", methods=["GET"])
+def get_notifications():
+    address = request.args.get("address", "").lower()
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        query = "SELECT * FROM notifications WHERE address = %s ORDER BY tanggal DESC"
+        cursor.execute(query, (address,))
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return jsonify(rows)
+    except Exception as e:
+        return jsonify([])
+
+@app.route("/notifications/mark-read", methods=["POST"])
+def mark_read():
+    address = request.json.get("address")
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        # Ubah semua yang FALSE (0) jadi TRUE (1) untuk user ini
+        query = "UPDATE notifications SET is_read = TRUE WHERE address = %s"
+        cursor.execute(query, (address.lower(),))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({"status": "success"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route("/auth/login", methods=["POST"])
 def login_api():
@@ -72,7 +148,7 @@ def login_api():
     print(f"DEBUG: Upaya Login -> {address}")
 
     # A. CEK ADMIN (Pemilik Kontrak)
-    # Admin selalu bisa login tanpa perlu registrasi tambahan
+
     contract_admin = contract.functions.admin().call()
     if address == contract_admin:
         return jsonify({
@@ -104,7 +180,7 @@ def login_api():
                 "role": "doctor", 
                 "status": "pending_approval", 
                 "message": "Akun Dokter Anda sedang menunggu verifikasi Admin. Silakan hubungi admin untuk aktivasi."
-            }), 403
+            }), 202
 
     # C. CEK PASIEN
     patient_name = contract.functions.patientNames(address).call()
@@ -121,6 +197,64 @@ def login_api():
         "error": "Alamat wallet belum terdaftar di Blockchain.",
         "message": "Silakan masuk ke halaman Registrasi terlebih dahulu."
     }), 404 
+
+@app.route("/admin/dashboard/stats", methods=["GET"])
+def get_admin_dashboard_stats():
+    try:
+        # 1. Ambil SEMUA address yang pernah register (Pasien & Dokter) dari Blockchain
+        all_user_addrs = contract.functions.getAllUsers().call()
+        admin_addr = contract.functions.admin().call()
+        
+        stats = {
+            "total_pengguna": 0, 
+            "pending_verif": 0, 
+            "pasien": 0, 
+            "dokter_medis": 0, 
+            "dokter_herbal": 0
+        }
+        pending_registrations = []
+
+        for addr in all_user_addrs:
+            checksum_acc = web3.to_checksum_address(addr)
+            if checksum_acc == admin_addr: continue
+
+            # --- CEK APAKAH DIA PASIEN ---
+            p_name = contract.functions.patientNames(checksum_acc).call()
+            if p_name != "":
+                stats["total_pengguna"] += 1
+                stats["pasien"] += 1
+                # Jika dia pasien, lanjut ke user berikutnya
+                continue
+
+            # --- CEK APAKAH DIA DOKTER ---
+            doc = contract.functions.doctors(checksum_acc).call()
+            # doc structure: [name, specialty, isApproved, isRegistered]
+            if doc[3]: # isRegistered
+                if doc[2]: # isApproved
+                    stats["total_pengguna"] += 1
+                    if "herbal" in doc[1].lower():
+                        stats["dokter_herbal"] += 1
+                    else:
+                        stats["dokter_medis"] += 1
+                else:
+                    # MASUK KE LIST PENDING (Gambar 2 Maria)
+                    stats["pending_verif"] += 1
+                    pending_registrations.append({
+                        "id": checksum_acc,
+                        "name": doc[0],
+                        "initials": doc[0][:2].upper(),
+                        "display_role": "Dokter " + ("Herbal" if "herbal" in doc[1].lower() else "Medis"),
+                        "date_string": "Menunggu Verifikasi"
+                    })
+
+        return jsonify({
+            "status": "success",
+            "stats": stats,
+            "pending_registrations": pending_registrations
+        }), 200
+    except Exception as e:
+        print(f"Error Admin Stats: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 # =========================
 # HERBAL (SEMANTIC SEARCH)
 # =========================
@@ -164,6 +298,7 @@ def search_herbal_api():
 # --- ENDPOINT TAMBAHAN UNTUK DASHBOARD DOKTER ---
 @app.route("/herbal/all", methods=["GET"])
 def get_all_herbs():
+    doctor_addr = request.args.get("address")
     try:
         import chromadb
         import os
@@ -175,6 +310,11 @@ def get_all_herbs():
         collection = client.get_or_create_collection(name=target_name)
         results = collection.get() 
         
+        if doctor_addr:
+            results = collection.get(where={"doctor_address": doctor_addr.lower()})
+        else:
+            results = collection.get()
+
         herbs = []
         if results and "ids" in results:
             for i in range(len(results["ids"])):
@@ -285,11 +425,54 @@ def update_herbal(id):
         print(f"❌ Gagal Update: {e}")
         return jsonify({"error": str(e)}), 500
 
+def save_recommendation_to_history(address, rekomendasi_data):
+    file_path = 'herbal_history.json'
+    history = {}
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, 'r') as f:
+                history = json.load(f)
+        except: history = {}
+    
+    addr_key = address.lower()
+    if addr_key not in history:
+        history[addr_key] = []
+    
+    # Simpan hasil
+    history[addr_key].append({
+        "timestamp": datetime.now().isoformat(),
+        "data": rekomendasi_data
+    })
+    
+    with open(file_path, 'w') as f:
+        json.dump(history, f)
+
+@app.route("/herbal/history", methods=["GET"])
+def get_herbal_history():
+    address = request.args.get("address", "").lower()
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        query = "SELECT * FROM riwayat_rekomendasi WHERE address = %s ORDER BY tanggal DESC"
+        cursor.execute(query, (address,))
+        rows = cursor.fetchall()
+        
+        # Parse string JSON balik ke objek agar bisa dibaca Frontend
+        for row in rows:
+            row['hasil_ai'] = json.loads(row['hasil_ai'])
+            
+        cursor.close()
+        conn.close()
+        return jsonify(rows)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/herbal/recommendation-input", methods=["GET"])
 def recommendation_input():
     query = request.args.get("q", "").lower() 
     medical = request.args.get("medical", "")
     use_rag = request.args.get("use_rag", "true").lower() == "true"
+    address = request.args.get("address", "").lower()
     
     medical_list = [m.strip() for m in medical.split(",") if m.strip()]
 
@@ -325,9 +508,32 @@ def recommendation_input():
     try:
         llm_output = generate_herbal_recommendation(llm_input)
         llm_output["mode"] = llm_input["mode"] 
+        if address:
+                data_simpan = {
+                    "keluhan": query,
+                    "hasil": llm_output
+                }
+                save_recommendation_to_sql(address, query, llm_output, llm_input["mode"])
+
         return jsonify(llm_output)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/herbal/history-count", methods=["GET"])
+def get_history_count():
+    address = request.args.get("address", "").lower()
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        query = "SELECT COUNT(*) FROM riwayat_rekomendasi WHERE address = %s"
+        cursor.execute(query, (address,))
+        count = cursor.fetchone()[0]
+        cursor.close()
+        conn.close()
+        return jsonify({"count": count})
+    except:
+        return jsonify({"count": 0})
 # =========================
 # IPFS  
 # =========================
@@ -382,7 +588,9 @@ def get_medical_list_api():
 
         # CONTEK CARA HERBAL: Ambil semua data dari ChromaDB
         results = collection.get()
-        
+        print(f"🔍 [DEBUG DATABASE] Total IDs di Chroma: {len(results['ids'])}")
+        print(f"🆔 [DEBUG DATABASE] List IDs: {results['ids']}")
+        print(f"📄 [DEBUG DATABASE] Metadatas: {results['metadatas']}")
         if not results['ids']:
             return jsonify({"history": []}), 200
 
@@ -452,7 +660,7 @@ def store_medical_api():
 
         # 2️⃣ TAHAP CHROMADB (Simpan ke Memori AI)
         # Menggunakan blockchain_index yang dikirim dari React
-        record_id = f"med_{pasien_address.lower()}_{blockchain_index}"
+        record_id = f"med_{pasien_address.lower()}_{int(time.time())}"
         
         from chroma.herbal_store import add_medical_to_chroma
         add_medical_to_chroma(record_id, pasien_address, diagnosa, ipfs_cid, blockchain_index)
@@ -550,22 +758,50 @@ def delete_medical_by_cid():
 # =========================
 # PASIEN
 # =========================
+# DI DALAM app.py
+@app.route("/auth/patients", methods=["GET"]) 
+def get_all_patients():
+    try:
+        all_accounts = web3.eth.accounts
+        patient_list = []
+        
+        for acc in all_accounts:
+            checksum_acc = web3.to_checksum_address(acc)
+            name = contract.functions.patientNames(checksum_acc).call()
+            
+            if name != "" and name is not None:
+                patient_list.append({
+                    "address": checksum_acc,
+                    "name": name
+                })
+        
+        return jsonify({"patients": patient_list}), 200
+    except Exception as e:
+        return jsonify({"patients": [], "error": str(e)}), 500
+    
 @app.route("/auth/doctors", methods=["GET"])
 def get_all_doctors():
     try:
         all_accounts = web3.eth.accounts
-        doctor_addresses = []
+        doctor_list = [] # Kita ubah jadi list of objects
         
         for acc in all_accounts:
             checksum_acc = web3.to_checksum_address(acc)
-            # Sesuaikan: Pakai 'verifiedDoctor' (sesuai ABI yang kamu tunjukkan tadi)
+            # 1. Cek apakah dokter terverifikasi
             is_verified = contract.functions.verifiedDoctor(checksum_acc).call()
             
             if is_verified:
-                # Kita hanya kirim ALAMATNYA saja (string) agar Frontend bisa melakukan loop
-                doctor_addresses.append(checksum_acc)
+                # 2. Ambil info lengkap dokter dari Mapping 'doctors' di Blockchain
+                # Biasanya returns: [name, specialty, isApproved, isRegistered]
+                doc_info = contract.functions.doctors(checksum_acc).call()
+                
+                # 3. Masukkan Alamat dan Nama ke dalam list
+                doctor_list.append({
+                    "address": checksum_acc,
+                    "name": doc_info[0] # doctor_info[0] biasanya adalah NAMA
+                })
         
-        return jsonify({"doctors": doctor_addresses}), 200
+        return jsonify({"doctors": doctor_list}), 200
     except Exception as e:
         print(f"❌ Error Detail: {str(e)}")
         return jsonify({"doctors": [], "error": str(e)}), 500
@@ -582,12 +818,33 @@ def grant_access_api():
 
 @app.route("/patient/revoke-access", methods=["POST"])
 def revoke_access_api():
-    data = request.json
-    tx_hash = revoke_access(
-        data["patient_private_key"],
-        data["doctor_address"]
-    )
-    return jsonify({"tx_hash": tx_hash})
+    try:
+        data = request.json
+        # Ambil data dari body request
+        patient_address = data.get("address") # Alamat wallet pasien
+        doctor_address = data.get("doctor_address")
+        doctor_name = data.get("doctor_name", "Dokter")
+        private_key = data.get("patient_private_key")
+
+        # 1. Jalankan fungsi blockchain
+        tx_hash = revoke_access(
+            private_key,
+            doctor_address
+        )
+
+        pesan_untuk_pasien = f"Izin akses untuk dr. {doctor_name} telah berhasil dicabut."
+        add_notification(patient_address, pesan_untuk_pasien)
+
+        pesan_untuk_dokter = f"Akses Anda ke rekam medis {patient_address[:10]}... telah dicabut oleh pasien."
+        add_notification(doctor_address, pesan_untuk_dokter)
+
+        return jsonify({
+            "status": "success",
+            "tx_hash": tx_hash,
+            "message": "Akses berhasil dicabut dan log tersimpan."
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route("/patient/reject-access", methods=["POST"])
 def reject_access_api():
@@ -653,6 +910,7 @@ def revoke():
 @app.route("/herbal/store", methods=["POST"])
 def store_herbal_api():
     data = request.json
+    doctor_address = data.get("doctor_address")
     nama = data.get("name")
     # Ambil data baru dari form
     indikasi = data.get("indikasi")
@@ -666,7 +924,8 @@ def store_herbal_api():
             "name": nama,
             "indikasi": indikasi,
             "kontraindikasi": kontraindikasi,
-            "deskripsi": deskripsi
+            "deskripsi": deskripsi,
+            "doctor_address": doctor_address
         }
         ipfs_cid = upload_json_to_ipfs(herbal_metadata)
         print(f"✅ IPFS Success: {ipfs_cid}")
@@ -677,7 +936,8 @@ def store_herbal_api():
             indikasi=indikasi, 
             kontraindikasi=kontraindikasi, # Pastikan ini ada!
             cid=ipfs_cid,
-            content=deskripsi
+            content=deskripsi,
+            doctor_address = data.get("doctor_address")
 
         )
         print("✅ ChromaDB Indexed")
@@ -700,6 +960,8 @@ def doctor_request_access_api():
         data["doctor_private_key"],
         data["patient_address"]
     )
+    pesan = f"dr. {doctor_name} meminta izin untuk mengakses rekam medis Anda."
+    add_notification(patient_address, pesan)
     return jsonify({"tx_hash": tx_hash, "status": "Request sent to blockchain"})
 
 @app.route("/doctor/medical-records", methods=["GET"])
