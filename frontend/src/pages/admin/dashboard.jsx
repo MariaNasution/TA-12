@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar from '../../components/Sidebar';
 import BerandaAdmin from './BerandaAdmin';
+import VerifikasiAkun from './VerifikasiAkun';
 import { useAuth } from '../../context/AuthContext';
 import { ethers } from 'ethers';
 import { CONTRACT_ADDRESS, HEALTH_RECORD_ABI } from '../../api/contract_abi';
@@ -104,7 +105,13 @@ export default function AdminDashboard() {
           />
         )}
         
-        {activeTab === 'verifikasi' && <div className="p-20">Halaman Verifikasi Lengkap...</div>}
+        {activeTab === 'verifikasi' && (
+          <VerifikasiAkun 
+            pendingList={adminData.pending_registrations}
+            onApprove={handleApprove}
+            onReject={handleReject}
+          />
+        )}
         {activeTab === 'profil' && (
           <ProfilSaya />
         )}

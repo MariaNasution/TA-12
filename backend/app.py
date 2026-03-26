@@ -249,6 +249,7 @@ def register_api():
         return jsonify({"error": "Format alamat wallet tidak valid"}), 400
 
     password = data.get("password")
+    name = data.get("name", "")
     role = data.get("role", "patient")
 
     if not password:
@@ -270,7 +271,7 @@ def register_api():
             conn.close()
             return jsonify({"error": "Wallet sudah terdaftar di basis data"}), 409
 
-        cursor.execute("INSERT INTO user_auth (wallet_address, password_hash) VALUES (%s, %s)", (address, hashed_pw))
+        cursor.execute("INSERT INTO user_auth (wallet_address, name, password_hash) VALUES (%s, %s, %s)", (address, name, hashed_pw))
         conn.commit()
         cursor.close()
         conn.close()

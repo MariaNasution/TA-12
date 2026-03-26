@@ -6,6 +6,7 @@ import RiwayatMedis from './menus/RiwayatMedis';
 import AksesDokter from './menus/AksesDokter';
 import RiwayatRekomendasi from './menus/RiwayatRekomendasi';
 import NotifikasiPasien from './menus/NotifikasiPasien';
+import ProfilSaya from '../../components/ProfilSaya';
 import { useAuth } from '../../context/AuthContext';
 import { CONTRACT_ADDRESS, HEALTH_RECORD_ABI } from '../../api/contract_abi';
 import { ethers } from 'ethers';
@@ -339,6 +340,9 @@ setMedicalRecords(finalData);
           <NotifikasiPasien 
             address={address} 
           />
+        )}
+        {activeTab === 'profil' && (
+          <ProfilSaya />
         )}
         </section>
       </main>
