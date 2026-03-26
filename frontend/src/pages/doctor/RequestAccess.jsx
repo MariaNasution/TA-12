@@ -106,7 +106,18 @@ const RequestAccess = ({
     </tr>
   ))}
 
-              {/* 3. TAMPILKAN YANG DITOLAK (Rejected) - Jika tersedia */}
+  {typeof rejectedRequests !== 'undefined' && rejectedRequests.map((req, idx) => (
+    <tr key={`rej-${idx}`}>
+      <td className="info-cell">
+        <div className="patient-name">{req.name}</div>
+        <div className="patient-addr">{req.address.substring(0, 16)}...</div>
+      </td>
+      <td>
+        <span className="status-tag rejected">Ditolak</span>
+      </td>
+      <td className="time-cell">Oleh Pasien</td>
+    </tr>
+  ))}
 
               {/* 4. JIKA SEMUA KOSONG */}
               {approvedDocs.length === 0 && pendingRequests.length === 0 && (

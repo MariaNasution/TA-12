@@ -89,6 +89,14 @@
         }
     };
 
+      {activeTab === 'riwayat' && (
+          <RiwayatInput 
+              patientsHistory={patientsHistory} 
+              onEdit={prepareEdit} 
+              onDelete={handleDeleteMedical}
+              txLoading={txLoading}
+          />
+      )}
       const handleSaveMedicalData = async (e) => {
           e.preventDefault();
           if (!patientAddr) return alert("Pilih pasien terlebih dahulu!");

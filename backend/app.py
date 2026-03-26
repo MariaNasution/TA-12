@@ -174,7 +174,7 @@ def login_api():
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT password_hash, name FROM user_auth WHERE wallet_address = %s", (address,))
+        cursor.execute("SELECT password_hash FROM user_auth WHERE wallet_address = %s", (address,))
         user_record = cursor.fetchone()
 
         if not user_record:
@@ -190,8 +190,6 @@ def login_api():
             cursor.close()
             conn.close()
             return jsonify({"error": "Password salah"}), 401
-
-        db_user_name = user_record.get('name', '')
 
         # Update last login
         cursor.execute("UPDATE user_auth SET last_login = %s WHERE wallet_address = %s", (datetime.now(), address))
@@ -214,7 +212,7 @@ def login_api():
 
             return jsonify({
                 "role": role,
-                "name": db_user_name or doctor_info[0],
+                "name": doctor_info[0],
                 "specialty": doctor_info[1],
                 "status": "approved"
             }), 200
@@ -230,7 +228,7 @@ def login_api():
     if patient_name != "" and patient_name is not None:
         return jsonify({
             "role": "patient",
-            "name": db_user_name or patient_name,
+            "name": patient_name,
             "status": "active"
         }), 200
 
@@ -251,15 +249,12 @@ def register_api():
         return jsonify({"error": "Format alamat wallet tidak valid"}), 400
 
     password = data.get("password")
-    name = data.get("name", "")
     role = data.get("role", "patient")
 
     if not password:
         return jsonify({"error": "Password harus diisi"}), 400
-    if not name:
-        return jsonify({"error": "Nama harus diisi"}), 400
 
-    print(f"DEBUG: Registrasi baru -> {address} ({role}) nama={name}")
+    print(f"DEBUG: Registrasi baru -> {address} ({role})")
 
     try:
         # --- 1. SIMPAN PASSWORD KE MYSQL ---
@@ -275,7 +270,7 @@ def register_api():
             conn.close()
             return jsonify({"error": "Wallet sudah terdaftar di basis data"}), 409
 
-        cursor.execute("INSERT INTO user_auth (wallet_address, name, password_hash) VALUES (%s, %s, %s)", (address, name, hashed_pw))
+        cursor.execute("INSERT INTO user_auth (wallet_address, password_hash) VALUES (%s, %s)", (address, hashed_pw))
         conn.commit()
         cursor.close()
         conn.close()
