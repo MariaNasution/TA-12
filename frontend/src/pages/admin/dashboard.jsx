@@ -3,12 +3,14 @@ import Sidebar from '../../components/Sidebar';
 import BerandaAdmin from './BerandaAdmin';
 import VerifikasiAkun from './VerifikasiAkun';
 import { useAuth } from '../../context/AuthContext';
+import { useRouter } from 'next/router';
 import { ethers } from 'ethers';
 import { CONTRACT_ADDRESS, HEALTH_RECORD_ABI } from '../../api/contract_abi';
 import ProfilSaya from '../../components/ProfilSaya';
 
 export default function AdminDashboard() {
-  const { address, role, loading: authLoading } = useAuth();
+  const { address, role, loading: authLoading, isAuthenticated } = useAuth();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState('dashboard');
   
   // State Data sesuai Gambar 1 & 2
@@ -18,6 +20,19 @@ export default function AdminDashboard() {
   });
 
   const [isLoading, setIsLoading] = useState(true);
+
+  // AUTH GUARD: Pastikan user authenticated dan role admin
+  useEffect(() => {
+    if (authLoading) return;
+    if (!isAuthenticated) {
+      router.replace('/register');
+      return;
+    }
+    if (role !== 'admin') {
+      router.replace('/register');
+      return;
+    }
+  }, [authLoading, isAuthenticated, role, router]);
 
   // --- FUNGSI AMBIL DATA DARI BLOCKCHAIN (VIA FLASK) ---
   const fetchAdminStats = useCallback(async () => {

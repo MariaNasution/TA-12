@@ -1,6 +1,7 @@
     import React, { useState, useEffect, useCallback } from 'react';
     import Sidebar from '../../components/Sidebar';
     import { useAuth } from '../../context/AuthContext';
+    import { useRouter } from 'next/router';
     import { CONTRACT_ADDRESS, HEALTH_RECORD_ABI } from '../../api/contract_abi';
     import { ethers } from 'ethers';
     import BerandaDokter from './BerandaDokter'; 
@@ -12,7 +13,8 @@
     import ProfilSaya from '../../components/ProfilSaya';
 
     const DoctorDashboard = () => {
-      const { address, userName, role, loading } = useAuth();
+      const { address, userName, role, status, loading, isAuthenticated } = useAuth();
+      const router = useRouter();
       const [activeTab, setActiveTab] = useState('dashboard');
       const [patientAddr, setPatientAddr] = useState(''); 
       const [txLoading, setTxLoading] = useState(false);
@@ -25,6 +27,23 @@
       const [patientsHistory, setPatientsHistory] = useState([]); // Riwayat dari Flask
       const [approvedDocs, setApprovedDocs] = useState([]); // Pasien Aktif
       const [pendingDocs, setPendingDocs] = useState([]); // Request Menunggu
+
+      // AUTH GUARD: Pastikan user authenticated, role benar, dan bukan pending
+      useEffect(() => {
+        if (loading) return;
+        if (!isAuthenticated) {
+          router.replace('/register');
+          return;
+        }
+        if (status === 'pending_approval') {
+          router.replace('/pending-verification');
+          return;
+        }
+        if (role !== 'doctor') {
+          router.replace('/register');
+          return;
+        }
+      }, [loading, isAuthenticated, role, status, router]);
 
       const fetchNotifications = useCallback(async () => {
         if (!address) return;

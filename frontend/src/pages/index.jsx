@@ -4,25 +4,41 @@ import { useAuth } from '../context/AuthContext';
 import { useWeb3Modal } from '@web3modal/ethers5/react';
 
 export default function HomePage() {
-  const { address, role, isConnected, loading } = useAuth();
+  const { address, role, status, isConnected, isAuthenticated, loading } = useAuth();
   const { open } = useWeb3Modal();
   const router = useRouter();
 
   useEffect(() => {
-    // Tunggu sampai loading selesai dan wallet sudah terhubung
-    if (!loading && isConnected) {
-      if (role === 'none') {
-        console.log("User belum terdaftar, mengarahkan ke halaman registrasi...");
+    if (loading) return;
+
+    // Jika belum authenticated, arahkan ke register
+    if (!isAuthenticated) {
+      if (isConnected && address) {
         router.push('/register');
-      } else if (role === 'patient') {
-        router.push('/patient/dashboard');
-      } else if (role === 'doctor' || role === 'herbal_doctor') {
-        router.push('/doctor/dashboard');
-      } else if (role === 'admin') {
-        router.push('/admin/dashboard');
       }
+      return;
     }
-  }, [role, isConnected, loading, router]);
+
+    // Jika authenticated tapi status pending, arahkan ke pending-verification
+    if (status === 'pending_approval') {
+      router.push('/pending-verification');
+      return;
+    }
+
+    // Authenticated dan approved → arahkan ke dashboard sesuai role
+    if (role === 'patient') {
+      router.push('/patient/dashboard');
+    } else if (role === 'herbal_doctor') {
+      router.push('/herbs/dashboard');
+    } else if (role === 'doctor') {
+      router.push('/doctor/dashboard');
+    } else if (role === 'admin') {
+      router.push('/admin/dashboard');
+    } else {
+      // Role tidak dikenali atau belum terdaftar
+      router.push('/register');
+    }
+  }, [role, status, isConnected, isAuthenticated, loading, address, router]);
 
   return (
     <div style={{ textAlign: 'center', padding: '100px', fontFamily: 'sans-serif' }}>
@@ -40,7 +56,7 @@ export default function HomePage() {
         </div>
       ) : (
         <div>
-          <p>⌛ Mengarahkan ke halaman registrasi...</p>
+          <p>⌛ Mengarahkan ke halaman yang sesuai...</p>
         </div>
       )}
     </div>

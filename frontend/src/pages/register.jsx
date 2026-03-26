@@ -6,7 +6,7 @@ import { useRouter } from 'next/router';
 import axios from 'axios';
 
 export default function RegisterPage() {
-    const { address, isConnected, connectWallet } = useAuth();
+    const { address, isConnected, connectWallet, setSession } = useAuth();
     const router = useRouter();
     const [name, setName] = useState(''); 
     const [password, setPassword] = useState('');
@@ -20,6 +20,7 @@ export default function RegisterPage() {
     const [toast, setToast] = useState(null);
     const [popup, setPopup] = useState(null);
     const [inlineErrors, setInlineErrors] = useState({});
+    const [pendingRedirect, setPendingRedirect] = useState(null); // Track where to redirect after popup close
 
     const fetchAdminFromChain = async () => {
         if (typeof window !== 'undefined' && window.ethereum) {
@@ -99,13 +100,23 @@ export default function RegisterPage() {
                         title: "Berhasil!", 
                         message: "Registrasi Pasien Berhasil! Anda akan dialihkan ke halaman Login." 
                     });
+                    setPendingRedirect('/login');
                 } else {
                     const tx = await contract.registerDoctor(name, specialty);
                     await tx.wait();
+                    // Set session sebagai pending_approval agar langsung masuk ke pending-verification
+                    const doctorRole = specialty.toLowerCase().includes('herbal') ? 'herbal_doctor' : 'doctor';
+                    setSession({
+                        address: address,
+                        role: doctorRole,
+                        userName: name,
+                        status: 'pending_approval'
+                    });
                     setPopup({ 
                         title: "Berhasil!", 
-                        message: "Registrasi Dokter Berhasil! Tunggu Approval Admin. Anda akan dialihkan ke halaman Login." 
+                        message: "Registrasi Dokter Berhasil! Tunggu Approval Admin. Anda akan dialihkan ke halaman verifikasi." 
                     });
+                    setPendingRedirect('/pending-verification');
                 }
             } catch (bcError) {
                 console.warn("Blockchain transaction skipped:", bcError.message);
@@ -115,16 +126,11 @@ export default function RegisterPage() {
                         title: "Registrasi Selesai", 
                         message: "Password tersimpan. Wallet Anda sebelumnya sudah tercatat di Blockchain." 
                     });
+                    setPendingRedirect('/login');
                 } else {
                     throw bcError;
                 }
             }
-
-            // 3. Redirect ke halaman login setelah registrasi berhasil
-            setTimeout(() => {
-                setPopup(null);
-                router.push('/login');
-            }, 3000);
 
         } catch (error) {
             console.error(error);
@@ -151,7 +157,7 @@ export default function RegisterPage() {
                     <div style={{ background: 'white', padding: '30px', borderRadius: '12px', width: '90%', maxWidth: '400px', textAlign: 'center', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
                         <h3 style={{ margin: '0 0 16px 0', color: '#2d3748', fontSize: '1.25rem' }}>{popup.title}</h3>
                         <p style={{ margin: '0 0 24px 0', color: '#4a5568', lineHeight: '1.5' }}>{popup.message}</p>
-                        <button onClick={() => setPopup(null)} style={{ padding: '10px 24px', background: '#3182ce', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem' }}>
+                        <button onClick={() => { setPopup(null); if (pendingRedirect) { router.push(pendingRedirect); setPendingRedirect(null); } }} style={{ padding: '10px 24px', background: '#3182ce', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem' }}>
                             Tutup
                         </button>
                     </div>

@@ -5,15 +5,34 @@ import KatalogHerbal from './KatalogHerbal';
 import TambahHerbal from './TambahHerbal'; // Pastikan diimpor
 import ProfilSaya from '../../components/ProfilSaya';
 import { useAuth } from '../../context/AuthContext';
+import { useRouter } from 'next/router';
 import { ethers } from 'ethers';
 import { CONTRACT_ADDRESS, HEALTH_RECORD_ABI } from '../../api/contract_abi';
 
 export default function HerbalDoctorDashboard() {
-  const { address, role, loading } = useAuth();
+  const { address, role, status, loading, isAuthenticated } = useAuth();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [herbalList, setHerbalList] = useState([]);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+
+  // AUTH GUARD: Pastikan user authenticated, role benar, dan bukan pending
+  useEffect(() => {
+    if (loading) return;
+    if (!isAuthenticated) {
+      router.replace('/register');
+      return;
+    }
+    if (status === 'pending_approval') {
+      router.replace('/pending-verification');
+      return;
+    }
+    if (role !== 'herbal_doctor') {
+      router.replace('/register');
+      return;
+    }
+  }, [loading, isAuthenticated, role, status, router]);
 
   const [form, setForm] = useState({
     id: null,

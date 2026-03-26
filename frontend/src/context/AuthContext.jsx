@@ -26,9 +26,27 @@ export const AuthProvider = ({ children }) => {
             : { address: null, role: null, userName: null, status: null }
     );
     const [loading, setLoading] = useState(false);
-    const [isAuthenticated, setIsAuthenticated] = useState(storedSession ? true : false);
+    // isAuthenticated hanya true jika ada stored session DAN wallet address cocok
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
     const router = useRouter();
     const prevAddressRef = useRef(storedSession?.address || null);
+
+    // Validasi session: hanya authenticated jika wallet terhubung DAN address cocok dengan session
+    useEffect(() => {
+        const stored = getStoredSession();
+        if (isConnected && address && stored && stored.address?.toLowerCase() === address?.toLowerCase()) {
+            // Wallet terhubung dan cocok dengan session → authenticated
+            setIsAuthenticated(true);
+        } else if (!isConnected || !address) {
+            // Wallet belum terhubung → tidak authenticated
+            setIsAuthenticated(false);
+        } else if (stored && stored.address?.toLowerCase() !== address?.toLowerCase()) {
+            // Wallet terhubung tapi address berbeda dari session → reset
+            setIsAuthenticated(false);
+            localStorage.removeItem('herbalchain_session');
+            setUser({ address: address, role: null, userName: null, status: null });
+        }
+    }, [isConnected, address]);
 
     // Simpan session ke localStorage setiap kali user state berubah
     useEffect(() => {
@@ -48,6 +66,17 @@ export const AuthProvider = ({ children }) => {
         } catch (error) {
             console.error("Wallet connection error:", error);
         }
+    };
+
+    // Fungsi untuk set session langsung (digunakan setelah registrasi dokter)
+    const setSession = (sessionData) => {
+        setUser({
+            address: sessionData.address,
+            role: sessionData.role,
+            userName: sessionData.userName || null,
+            status: sessionData.status || null
+        });
+        setIsAuthenticated(true);
     };
 
     // Login penuh (Wallet + Password) — dipanggil dari halaman /login
@@ -94,7 +123,7 @@ export const AuthProvider = ({ children }) => {
     // Deteksi pergantian akun MetaMask → reset auth dan redirect ke /register
     useEffect(() => {
         if (isConnected && address) {
-            if (prevAddressRef.current && prevAddressRef.current !== address) {
+            if (prevAddressRef.current && prevAddressRef.current.toLowerCase() !== address.toLowerCase()) {
                 // Akun MetaMask berubah → reset state dan redirect ke register
                 console.log('🔄 MetaMask account changed, redirecting to /register');
                 setUser({ address: address, role: null, userName: null, status: null });
@@ -107,8 +136,7 @@ export const AuthProvider = ({ children }) => {
             }
             prevAddressRef.current = address;
         } else if (!isConnected) {
-            // Wallet disconnected — tapi JANGAN reset jika ada session tersimpan
-            // Ini mencegah sidebar hilang saat MetaMask belum selesai reconnect
+            // Wallet disconnected
             const stored = getStoredSession();
             if (!stored) {
                 setUser({ address: null, role: null, userName: null, status: null });
@@ -118,7 +146,7 @@ export const AuthProvider = ({ children }) => {
         }
     }, [isConnected, address]);
 
-    // Saat wallet terhubung dan di halaman utama, arahkan ke register
+    // Saat wallet terhubung dan di halaman utama, arahkan ke register (jika belum authenticated)
     useEffect(() => {
         if (isConnected && address && !isAuthenticated) {
             const currentPath = router.pathname;
@@ -144,6 +172,7 @@ export const AuthProvider = ({ children }) => {
             isAuthenticated,
             connectWallet, 
             loginWithPassword,
+            setSession,
             logout
         }}>
             {children}

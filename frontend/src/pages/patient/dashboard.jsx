@@ -8,11 +8,13 @@ import RiwayatRekomendasi from './menus/RiwayatRekomendasi';
 import NotifikasiPasien from './menus/NotifikasiPasien';
 import ProfilSaya from '../../components/ProfilSaya';
 import { useAuth } from '../../context/AuthContext';
+import { useRouter } from 'next/router';
 import { CONTRACT_ADDRESS, HEALTH_RECORD_ABI } from '../../api/contract_abi';
 import { ethers } from 'ethers';
 
 export default function PatientDashboard() {
-  const { address, role, loading } = useAuth();
+  const { address, role, status, loading, isAuthenticated } = useAuth();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState('beranda');
   const [medicalRecords, setMedicalRecords] = useState([]);
   const [pendingDocs, setPendingDocs] = useState([]);
@@ -24,6 +26,19 @@ export default function PatientDashboard() {
   const [useRag, setUseRag] = useState(true); 
   const [isProcessing, setIsProcessing] = useState(false);
   const [notifs, setNotifs] = useState([]); 
+
+  // AUTH GUARD: Pastikan user authenticated dan role benar
+  useEffect(() => {
+    if (loading) return;
+    if (!isAuthenticated) {
+      router.replace('/register');
+      return;
+    }
+    if (role !== 'patient') {
+      router.replace('/register');
+      return;
+    }
+  }, [loading, isAuthenticated, role, status, router]);
 
  const loadRekomendasiCount = async () => {
     // TAMBAHKAN VALIDASI INI
