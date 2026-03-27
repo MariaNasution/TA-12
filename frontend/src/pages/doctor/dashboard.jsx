@@ -32,7 +32,7 @@
       useEffect(() => {
         if (loading) return;
         if (!isAuthenticated) {
-          router.replace('/register');
+          router.replace('/login');
           return;
         }
         if (status === 'pending_approval') {
@@ -40,7 +40,7 @@
           return;
         }
         if (role !== 'doctor') {
-          router.replace('/register');
+          router.replace('/login');
           return;
         }
       }, [loading, isAuthenticated, role, status, router]);

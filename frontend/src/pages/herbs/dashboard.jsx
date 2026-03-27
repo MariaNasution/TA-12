@@ -21,7 +21,7 @@ export default function HerbalDoctorDashboard() {
   useEffect(() => {
     if (loading) return;
     if (!isAuthenticated) {
-      router.replace('/register');
+      router.replace('/login');
       return;
     }
     if (status === 'pending_approval') {
@@ -29,7 +29,7 @@ export default function HerbalDoctorDashboard() {
       return;
     }
     if (role !== 'herbal_doctor') {
-      router.replace('/register');
+      router.replace('/login');
       return;
     }
   }, [loading, isAuthenticated, role, status, router]);

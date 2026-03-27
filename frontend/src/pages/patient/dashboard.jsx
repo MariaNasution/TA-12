@@ -31,11 +31,11 @@ export default function PatientDashboard() {
   useEffect(() => {
     if (loading) return;
     if (!isAuthenticated) {
-      router.replace('/register');
+      router.replace('/login');
       return;
     }
     if (role !== 'patient') {
-      router.replace('/register');
+      router.replace('/login');
       return;
     }
   }, [loading, isAuthenticated, role, status, router]);

@@ -36,7 +36,7 @@ from datetime import datetime
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
+CORS(app, resources={r"/.*": {"origins": "*"}}, supports_credentials=False)
 base_dir = os.path.dirname(os.path.abspath(__file__))
 
 @app.route("/notifications/log-event", methods=["POST"])
@@ -140,8 +140,10 @@ def mark_read():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.route("/auth/login", methods=["POST"])
+@app.route("/auth/login", methods=["POST", "OPTIONS"])
 def login_api():
+    if request.method == "OPTIONS":
+        return jsonify({"status": "OK"}), 200
     data = request.json
     try:
         address = web3.to_checksum_address(data.get("address"))
@@ -241,8 +243,10 @@ def login_api():
     }), 404
 
 
-@app.route("/auth/register", methods=["POST"])
+@app.route("/auth/register", methods=["POST", "OPTIONS"])
 def register_api():
+    if request.method == "OPTIONS":
+        return jsonify({"status": "OK"}), 200
     data = request.json
     try:
         address = web3.to_checksum_address(data.get("address"))

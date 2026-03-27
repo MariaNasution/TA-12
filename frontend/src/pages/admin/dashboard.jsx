@@ -26,11 +26,11 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (authLoading) return;
     if (!isAuthenticated) {
-      router.replace('/register');
+      router.replace('/login');
       return;
     }
     if (role !== 'admin') {
-      router.replace('/register');
+      router.replace('/login');
       return;
     }
   }, [authLoading, isAuthenticated, role, router]);

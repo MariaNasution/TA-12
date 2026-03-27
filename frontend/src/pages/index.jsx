@@ -14,7 +14,7 @@ export default function HomePage() {
     // Jika belum authenticated, arahkan ke register
     if (!isAuthenticated) {
       if (isConnected && address) {
-        router.push('/register');
+        router.push('/login');
       }
       return;
     }
@@ -36,7 +36,7 @@ export default function HomePage() {
       router.push('/admin/dashboard');
     } else {
       // Role tidak dikenali atau belum terdaftar
-      router.push('/register');
+      router.push('/login');
     }
   }, [role, status, isConnected, isAuthenticated, loading, address, router]);
 

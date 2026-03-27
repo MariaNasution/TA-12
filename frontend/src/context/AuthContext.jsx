@@ -26,8 +26,8 @@ export const AuthProvider = ({ children }) => {
             : { address: null, role: null, userName: null, status: null }
     );
     const [loading, setLoading] = useState(false);
-    // isAuthenticated hanya true jika ada stored session DAN wallet address cocok
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    // isAuthenticated starts true if there's a stored session, then validated once wallet connects
+    const [isAuthenticated, setIsAuthenticated] = useState(!!storedSession);
     const router = useRouter();
     const prevAddressRef = useRef(storedSession?.address || null);
 
@@ -125,11 +125,11 @@ export const AuthProvider = ({ children }) => {
         if (isConnected && address) {
             if (prevAddressRef.current && prevAddressRef.current.toLowerCase() !== address.toLowerCase()) {
                 // Akun MetaMask berubah → reset state dan redirect ke register
-                console.log('🔄 MetaMask account changed, redirecting to /register');
+                console.log('🔄 MetaMask account changed, redirecting to /login');
                 setUser({ address: address, role: null, userName: null, status: null });
                 setIsAuthenticated(false);
                 localStorage.removeItem('herbalchain_session');
-                router.push('/register');
+                router.push('/login');
             } else {
                 // Set address awal (jangan timpa role/userName yang sudah di-restore)
                 setUser(prev => ({ ...prev, address: address }));
@@ -151,7 +151,7 @@ export const AuthProvider = ({ children }) => {
         if (isConnected && address && !isAuthenticated) {
             const currentPath = router.pathname;
             if (currentPath === '/') {
-                router.push('/register');
+                router.push('/login');
             }
         }
     }, [isConnected, address, isAuthenticated]);
