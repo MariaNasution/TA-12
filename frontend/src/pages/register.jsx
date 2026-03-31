@@ -45,6 +45,8 @@ export default function RegisterPage() {
         setTimeout(() => setToast(null), 3000);
     };
 
+    const [documentFile, setDocumentFile] = useState(null);
+
     const handleRegister = async () => {
         setInlineErrors({}); // clear previous errors
         
@@ -61,6 +63,7 @@ export default function RegisterPage() {
         if (!password) errs.password = "Password tidak boleh kosong!";
         if (password && password !== confirmPassword) errs.confirmPassword = "Konfirmasi password tidak cocok!";
         if (role === 'doctor' && !specialty) errs.specialty = "Kategori spesialisasi dokter wajib dipilih!";
+        if (role === 'doctor' && !documentFile) errs.document = "Dokumen STR/SIP wajib diunggah!";
         
         if (Object.keys(errs).length > 0) {
             setInlineErrors(errs);
@@ -73,13 +76,19 @@ export default function RegisterPage() {
             const signer = provider.getSigner();
             const contract = new ethers.Contract(CONTRACT_ADDRESS, HEALTH_RECORD_ABI, signer);
 
-            // 1. Simpan ke Backend (MySQL + Password)
-            const res = await axios.post('http://127.0.0.1:5000/auth/register', {
-                address: address,
-                name: name,
-                password: password,
-                role: role
-            }, { validateStatus: (status) => status < 500 });
+            // 1. Simpan ke Backend (MySQL + Password + Document)
+            const formData = new FormData();
+            formData.append("address", address);
+            formData.append("name", name);
+            formData.append("password", password);
+            formData.append("role", role);
+            if (documentFile) {
+                formData.append("document", documentFile);
+            }
+
+            const res = await axios.post('http://127.0.0.1:5000/auth/register', formData, {
+                validateStatus: (status) => status < 500 
+            });
 
             if (res.status === 409) {
                 setLoading(false);
@@ -91,7 +100,6 @@ export default function RegisterPage() {
             }
 
             // 2. Lanjutkan ke Blockchain menggunakan Wallet Address sebagai Nama
-
             try {
                 if (role === 'patient') {
                     const tx = await contract.registerPatient(name);
@@ -216,6 +224,15 @@ export default function RegisterPage() {
                                     </label>
                                 </div>
                                 {inlineErrors.specialty && <p style={{ color: '#e53e3e', fontSize: '0.8rem', marginTop: '6px' }}>⚠️ {inlineErrors.specialty}</p>}
+                                
+                                <label style={{ display: 'block', margin: '20px 0 8px 0', fontWeight: 'bold' }}>Upload STR / SIP (PDF/JPG/PNG):</label>
+                                <input 
+                                    type="file" 
+                                    accept=".pdf,.jpg,.jpeg,.png" 
+                                    onChange={(e) => { setDocumentFile(e.target.files[0]); setInlineErrors({...inlineErrors, document: null}); }}
+                                    style={{ width: '100%', padding: '10px', background: '#fff', borderRadius: '8px', border: `1px solid ${inlineErrors.document ? '#e53e3e' : '#cbd5e0'}` }}
+                                />
+                                {inlineErrors.document && <p style={{ color: '#e53e3e', fontSize: '0.8rem', marginTop: '6px' }}>⚠️ {inlineErrors.document}</p>}
                             </div>
                         )}
 

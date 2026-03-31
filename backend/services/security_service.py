@@ -85,6 +85,34 @@ def encrypt_data(data: dict, wallet_address: str) -> dict:
         "tag": tag.hex()
     }
 
+def encrypt_file(file_bytes: bytes, wallet_address: str, mime_type: str) -> dict:
+    """
+    Enkripsi file binary (PDF/JPG/PNG) menggunakan AES-256-GCM.
+    
+    Returns:
+        dict berformat JSON yang aman untuk diunggah ke IPFS:
+        {
+          "encrypted_file": true,
+          "ciphertext": "<hex>",
+          "nonce": "<hex>",
+          "tag": "<hex>",
+          "mime_type": "image/jpeg"
+        }
+    """
+    key = get_user_key(wallet_address)
+    
+    nonce = get_random_bytes(16)
+    cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+    ciphertext, tag = cipher.encrypt_and_digest(file_bytes)
+    
+    return {
+        "encrypted_file": True,
+        "ciphertext": ciphertext.hex(),
+        "nonce": nonce.hex(),
+        "tag": tag.hex(),
+        "mime_type": mime_type
+    }
+
 
 # ============================================================
 # 4. DEKRIPSI — Untuk digunakan saat GET dari IPFS
@@ -93,20 +121,8 @@ def encrypt_data(data: dict, wallet_address: str) -> dict:
 def decrypt_data(encrypted_json: dict, wallet_address: str) -> dict:
     """
     Dekripsi data yang sudah dienkripsi oleh encrypt_data().
-    
-    Args:
-        encrypted_json: dict dari IPFS berisi ciphertext, nonce, tag
-        wallet_address: alamat wallet pemilik data (untuk derive key)
-    
-    Returns:
-        dict data asli (plaintext)
-    
-    Raises:
-        ValueError: jika data bukan format enkripsi yang valid (data legacy)
     """
-    # Cek apakah ini data terenkripsi atau data lama (legacy plaintext)
     if not encrypted_json.get("encrypted"):
-        # DATA LEGACY (belum dienkripsi) — kembalikan apa adanya
         return encrypted_json
     
     key = get_user_key(wallet_address)
@@ -123,6 +139,32 @@ def decrypt_data(encrypted_json: dict, wallet_address: str) -> dict:
     
     except (ValueError, KeyError) as e:
         raise ValueError(f"Dekripsi gagal — data korup atau kunci salah: {e}")
+
+def decrypt_file(encrypted_json: dict, wallet_address: str):
+    """
+    Dekripsi file binary.
+    
+    Returns:
+        (bytes, str): (file_bytes, mime_type)
+    """
+    if not encrypted_json.get("encrypted_file"):
+        raise ValueError("Bukan format file terenkripsi yang valid")
+    
+    key = get_user_key(wallet_address)
+    
+    try:
+        ciphertext = bytes.fromhex(encrypted_json["ciphertext"])
+        nonce = bytes.fromhex(encrypted_json["nonce"])
+        tag = bytes.fromhex(encrypted_json["tag"])
+        mime_type = encrypted_json.get("mime_type", "application/octet-stream")
+        
+        cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+        file_bytes = cipher.decrypt_and_verify(ciphertext, tag)
+        
+        return file_bytes, mime_type
+    
+    except (ValueError, KeyError) as e:
+        raise ValueError(f"Dekripsi file gagal: {e}")
 
 
 # ============================================================

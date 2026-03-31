@@ -1,7 +1,7 @@
 import React from 'react';
 import { UserCheck, UserPlus, XCircle, CheckCircle, Trash2  } from 'lucide-react';
 
-const AksesDokter = ({ pendingDocs = [], approvedDocs = [], onGrant, onRevoke, isProcessing }) => {
+const AksesDokter = ({ pendingDocs = [], approvedDocs = [], onGrant, onReject, onRevoke, isProcessing }) => {
   return (
     <div className="menu-wrapper">
       <div className="header-section">

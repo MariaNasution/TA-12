@@ -69,13 +69,16 @@ export default function LoginPage() {
 
             if (result.success) {
                 showToast(`Login Sukses sebagai ${result.data.role}`, "success");
-                // Note: AuthContext automatically handles routing on success
             } else {
                 const errLower = (result.error || "").toLowerCase();
                 if (errLower.includes("password salah")) {
                     setInlineError("Password yang Anda masukkan tidak sesuai.");
                 } else if (errLower.includes("belum terdaftar")) {
                     setPopup({ title: "Akses Ditolak", message: result.error || "Wallet ini belum terdaftar di sistem. Silakan registrasi." });
+                } else if (errLower.includes("registrasi belum lengkap")) {
+                    setPopup({ title: "Registrasi Belum Lengkap", message: result.error + " " + (result.message || "Silakan lakukan registrasi ulang untuk menyelesaikan proses.") });
+                } else if (errLower.includes("dinonaktifkan")) {
+                    setPopup({ title: "Akun Dinonaktifkan", message: result.error || "Akun Anda telah dinonaktifkan oleh Admin. Silakan hubungi administrator atau lakukan registrasi ulang." });
                 } else {
                     showToast(result.error || "Login gagal", "error");
                 }

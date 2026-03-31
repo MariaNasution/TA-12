@@ -23,7 +23,7 @@ def store_medical_record(doctor_pk, patient_addr, cid):
     # Dan parameter yang dikirim adalah 'cid' (bukan medical_data mentah)
     nonce = web3.eth.get_transaction_count(doctor_account.address)
     
-    txn = contract.functions.addRecord(patient_addr, cid).build_transaction({
+    txn = contract.functions.storeMedicalRecord(patient_addr, cid).build_transaction({
         'from': doctor_account.address,
         'nonce': nonce,
         'gas': 500000,
@@ -81,9 +81,9 @@ def get_medical_records_as_doctor(patient_address, doctor_address):
             {
                 "cid": r[0],
                 "timestamp": r[1],
-                "isActive": r[2] if len(r) > 2 else True
+                "isActive": r[3] if len(r) > 3 else True
             }
-            for r in records if r[2] is True # Hanya kirim yang aktif ke FE
+            for r in records if r[3] is True  # isActive ada di index 3: (cid, timestamp, createdBy, isActive)
         ]
 
     except Exception as e:

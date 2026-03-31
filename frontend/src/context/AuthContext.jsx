@@ -79,6 +79,39 @@ export const AuthProvider = ({ children }) => {
         setIsAuthenticated(true);
     };
 
+    // Fungsi untuk re-check status setelah dokter diverifikasi (BUG-01 fix)
+    // Dipanggil dari pending-verification.jsx saat polling menemukan status 'verified'
+    const checkStatus = async () => {
+        const stored = getStoredSession();
+        if (!stored?.address) return;
+        try {
+            // 1. Cek status verifikasi di database (tidak butuh password)
+            const statusRes = await fetch(`http://127.0.0.1:5000/auth/status/${stored.address}`);
+            const statusData = await statusRes.json();
+
+            if (statusData.verification_status === 'verified') {
+                // 2. Jika sudah verified, ambil role dari blockchain (tidak butuh password)
+                const roleRes = await fetch(`http://127.0.0.1:5000/auth/check-role/${stored.address}`);
+                const roleData = await roleRes.json();
+
+                const newUser = {
+                    address: stored.address,
+                    role: roleData.role || 'doctor',
+                    userName: roleData.name || stored.userName,
+                    status: 'active'
+                };
+                setUser(newUser);
+                setIsAuthenticated(true);
+                localStorage.setItem('herbalchain_session', JSON.stringify(newUser));
+                // Redirect ke dashboard yang sesuai
+                if (newUser.role === 'herbal_doctor') router.push('/herbs/dashboard');
+                else router.push('/doctor/dashboard');
+            }
+        } catch (err) {
+            console.error('checkStatus error:', err);
+        }
+    };
+
     // Login penuh (Wallet + Password) — dipanggil dari halaman /login
     const loginWithPassword = async (walletAddress, password) => {
         try {
@@ -112,7 +145,7 @@ export const AuthProvider = ({ children }) => {
                 }
                 return { success: true, data };
             } else {
-                return { success: false, error: data.error || data.message };
+                return { success: false, error: data.error || data.message, message: data.message };
             }
         } catch (error) {
             console.error("Login Error:", error);
@@ -173,6 +206,7 @@ export const AuthProvider = ({ children }) => {
             connectWallet, 
             loginWithPassword,
             setSession,
+            checkStatus,
             logout
         }}>
             {children}

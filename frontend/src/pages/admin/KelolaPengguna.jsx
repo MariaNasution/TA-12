@@ -1,30 +1,70 @@
 import React, { useState, useEffect } from 'react';
-import { Search } from 'lucide-react';
+import { Search, FileText, X, UserX } from 'lucide-react';
+import { ethers } from 'ethers';
+import { CONTRACT_ADDRESS, HEALTH_RECORD_ABI } from '../../api/contract_abi';
 
 const KelolaPengguna = () => {
   const [users, setUsers] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedDoc, setSelectedDoc] = useState(null); // { address: string, name: string }
+
+  const fetchUsers = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('http://127.0.0.1:5000/admin/users');
+      const data = await res.json();
+      if (data.status === 'success') {
+        setUsers(data.users || []);
+        setTotal(data.total || 0);
+      }
+    } catch (err) {
+      console.error('❌ Gagal ambil data pengguna:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeactivate = async (userAddress, userName) => {
+    if (!window.confirm(`Nonaktifkan dokter ${userName}? Dokter ini harus verifikasi ulang.`)) return;
+    try {
+      // 1. Transaksi blockchain — hapus status dokter di smart contract
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const signer = provider.getSigner();
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, HEALTH_RECORD_ABI, signer);
+      const tx = await contract.rejectDoctor(userAddress);
+      await tx.wait();
+
+      // 2. Backend — reset verification_status ke 'pending' dan kirim notifikasi
+      const res = await fetch('http://127.0.0.1:5000/admin/deactivate-doctor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: userAddress })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(`✅ Dokter ${userName} berhasil dinonaktifkan.`);
+        fetchUsers(); // Refresh list
+      } else {
+        alert('❌ Gagal menonaktifkan: ' + data.error);
+      }
+    } catch (err) {
+      console.error('❌ Error deactivate:', err);
+      alert('Gagal memproses: ' + (err.data?.message || err.message));
+    }
+  };
+
 
   useEffect(() => {
-    const fetchUsers = async () => {
-      setLoading(true);
-      try {
-        const res = await fetch('http://127.0.0.1:5000/admin/users');
-        const data = await res.json();
-        if (data.status === 'success') {
-          setUsers(data.users || []);
-          setTotal(data.total || 0);
-        }
-      } catch (err) {
-        console.error('❌ Gagal ambil data pengguna:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchUsers();
   }, []);
+
+  const handlePreview = (address, name) => {
+    setSelectedDoc({ address, name });
+  };
+
+  const closePreview = () => setSelectedDoc(null);
 
   const filteredUsers = users.filter((u) => {
     const term = searchTerm.toLowerCase();
@@ -51,8 +91,9 @@ const KelolaPengguna = () => {
 
   // --- Helper: Label & Warna Status Badge ---
   const getStatusBadge = (status) => {
-    if (status === 'active') return { label: 'Aktif', bg: '#e8f5e9', color: '#2e7d32', border: '#c8e6c9' };
+    if (status === 'active' || status === 'verified') return { label: 'Aktif', bg: '#e8f5e9', color: '#2e7d32', border: '#c8e6c9' };
     if (status === 'pending') return { label: 'Menunggu', bg: '#fffbeb', color: '#b45309', border: '#fde68a' };
+    if (status === 'rejected') return { label: 'Ditolak', bg: '#ffebee', color: '#c62828', border: '#ffcdd2' };
     return { label: 'Nonaktif', bg: '#ffebee', color: '#c62828', border: '#ffcdd2' };
   };
 
@@ -70,6 +111,27 @@ const KelolaPengguna = () => {
         <h1 className="kp-title">Kelola Pengguna</h1>
         <p className="kp-subtitle">Daftar semua pengguna yang terdaftar di sistem</p>
       </div>
+
+      {/* MODAL PRATINJAU DOKUMEN */}
+      {selectedDoc && (
+        <div className="modal-overlay">
+          <div className="modal-content large">
+            <div className="modal-header">
+              <h3>Dokumen STR/SIP: {selectedDoc.name}</h3>
+              <button onClick={closePreview} className="close-btn"><X size={20} /></button>
+            </div>
+            <div className="modal-body doc-preview">
+              <iframe 
+                src={`http://127.0.0.1:5000/admin/view-document/${selectedDoc.address}`} 
+                width="100%" 
+                height="500px" 
+                style={{ border: 'none', borderRadius: '8px' }}
+                title="Document Preview"
+              ></iframe>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Search Bar */}
       <div className="kp-search-bar">
@@ -94,8 +156,6 @@ const KelolaPengguna = () => {
             const avatarStyle = getAvatarColor(user.role);
             const roleBadge = getRoleBadge(user.role);
             const statusBadge = getStatusBadge(user.status);
-            // Pasien hanya tampil status Aktif (sesuai ketentuan)
-            const showStatus = user.role !== 'Pasien' ? true : true; // Pasien tetap tampil 'Aktif'
 
             return (
               <div key={idx} className="kp-item">
@@ -115,21 +175,46 @@ const KelolaPengguna = () => {
                   </div>
                 </div>
 
-                {/* Badges */}
-                <div className="kp-badges">
-                  <span
-                    className="kp-badge"
-                    style={{ background: roleBadge.bg, color: roleBadge.color, border: `1px solid ${roleBadge.border}` }}
-                  >
-                    {roleBadge.label}
-                  </span>
-                  <span
-                    className="kp-badge"
-                    style={{ background: statusBadge.bg, color: statusBadge.color, border: `1px solid ${statusBadge.border}` }}
-                  >
-                    {/* Pasien selalu tampilkan Aktif */}
-                    {user.role === 'Pasien' ? 'Aktif' : statusBadge.label}
-                  </span>
+                {/* Badges & Actions */}
+                <div className="kp-actions-wrapper">
+                  <div className="kp-badges">
+                    <span
+                      className="kp-badge"
+                      style={{ background: roleBadge.bg, color: roleBadge.color, border: `1px solid ${roleBadge.border}` }}
+                    >
+                      {roleBadge.label}
+                    </span>
+                    <span
+                      className="kp-badge"
+                      style={{ background: statusBadge.bg, color: statusBadge.color, border: `1px solid ${statusBadge.border}` }}
+                    >
+                      {user.role === 'Pasien' ? 'Aktif' : statusBadge.label}
+                    </span>
+                  </div>
+
+                  {/* Tombol Lihat Dokumen (Hanya untuk Dokter yang punya CID) */}
+                  {user.role !== 'Pasien' && user.document_cid && (
+                    <button 
+                      className="btn-view-doc-small" 
+                      onClick={() => handlePreview(user.address, user.name)}
+                      title="Lihat STR/SIP"
+                    >
+                      <FileText size={14} />
+                      Dokumen
+                    </button>
+                  )}
+
+                  {/* Tombol Nonaktifkan (Hanya untuk Dokter yang statusnya aktif/verified) */}
+                  {user.role !== 'Pasien' && (user.status === 'verified' || user.status === 'active') && (
+                    <button
+                      className="btn-deactivate"
+                      onClick={() => handleDeactivate(user.address, user.name)}
+                      title="Nonaktifkan dokter ini"
+                    >
+                      <UserX size={14} />
+                      Nonaktifkan
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -221,6 +306,12 @@ const KelolaPengguna = () => {
           font-family: monospace;
         }
 
+        .kp-actions-wrapper {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
         .kp-badges {
           display: flex;
           gap: 8px;
@@ -233,6 +324,60 @@ const KelolaPengguna = () => {
           font-weight: 600;
           white-space: nowrap;
         }
+
+        .btn-deactivate {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 5px 12px;
+          background: #fff5f5;
+          border: 1px solid #ffcccc;
+          border-radius: 8px;
+          font-size: 12px;
+          font-weight: 600;
+          color: #c62828;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+        .btn-deactivate:hover { background: #ffebee; border-color: #ef9a9a; }
+
+        .btn-view-doc-small {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 5px 12px;
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          font-size: 12px;
+          font-weight: 600;
+          color: #475569;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+        .btn-view-doc-small:hover { background: #f1f5f9; border-color: #cbd5e1; color: #1e293b; }
+
+        /* Modal Styles */
+        .modal-overlay {
+          position: fixed;
+          top: 0; left: 0; width: 100vw; height: 100vh;
+          background: rgba(0,0,0,0.5);
+          display: flex; align-items: center; justify-content: center;
+          z-index: 1000;
+        }
+        .modal-content {
+          background: white; border-radius: 16px; padding: 24px;
+          width: 90%; maxWidth: 500px;
+          box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
+          animation: modalIn 0.3s ease;
+        }
+        .modal-content.large { maxWidth: 800px; }
+        .modal-header {
+           display: flex; justify-content: space-between; align-items: center;
+           margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid #f3f4f6;
+        }
+        .modal-header h3 { margin: 0; font-size: 18px; color: #111; }
+        .close-btn { background: none; border: none; cursor: pointer; color: #999; }
 
         .kp-empty {
           text-align: center;
@@ -251,6 +396,10 @@ const KelolaPengguna = () => {
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(8px); }
           to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes modalIn {
+          from { opacity: 0; transform: scale(0.95); }
+          to { opacity: 1; transform: scale(1); }
         }
       `}</style>
     </div>

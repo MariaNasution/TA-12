@@ -108,15 +108,7 @@
         }
     };
 
-      {activeTab === 'riwayat' && (
-          <RiwayatInput 
-              patientsHistory={patientsHistory} 
-              onEdit={prepareEdit} 
-              onDelete={handleDeleteMedical}
-              txLoading={txLoading}
-          />
-      )}
-      const handleSaveMedicalData = async (e) => {
+const handleSaveMedicalData = async (e) => {
           e.preventDefault();
           if (!patientAddr) return alert("Pilih pasien terlebih dahulu!");
           
@@ -233,6 +225,16 @@
               
               console.log("Transaksi dikirim:", tx.hash);
               await tx.wait(); // Tunggu sampai transaksi sukses di Blockchain
+
+              // Kirim Notifikasi ke Pasien bahwa ada permintaan akses baru
+              await fetch("http://127.0.0.1:5000/notifications/add", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                      address: patientAddr.toLowerCase(), // Target: PASIEN
+                      pesan: `📩 Permintaan Akses Baru: dr. ${userName || address.substring(0, 6) + '...'} meminta izin mengakses rekam medis Anda.`
+                  })
+              });
 
               alert("Permintaan akses berhasil dikirim ke Pasien!");
               setPatientAddr(''); // Kosongkan input setelah sukses

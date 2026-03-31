@@ -39,6 +39,9 @@ CREATE TABLE IF NOT EXISTS user_auth (
     wallet_address VARCHAR(42) PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
+    document_cid VARCHAR(100) DEFAULT NULL,
+    verification_status ENUM('pending', 'verified', 'rejected') DEFAULT 'pending',
+    rejection_reason TEXT DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_login TIMESTAMP NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

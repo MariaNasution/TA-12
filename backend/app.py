@@ -177,7 +177,7 @@ def login_api():
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT password_hash FROM user_auth WHERE wallet_address = %s", (address,))
+        cursor.execute("SELECT password_hash FROM user_auth WHERE LOWER(wallet_address) = LOWER(%s)", (address,))
         user_record = cursor.fetchone()
 
         if not user_record:
@@ -236,18 +236,179 @@ def login_api():
         }), 200
 
     # D. JIKA ALAMAT TIDAK TERDAPAT DI BLOCKCHAIN
+    # Cek apakah user ada di DB tapi belum di blockchain (registrasi tidak lengkap)
+    try:
+        conn2 = get_db_connection()
+        cur2 = conn2.cursor(dictionary=True)
+        cur2.execute("SELECT verification_status FROM user_auth WHERE LOWER(wallet_address) = LOWER(%s)", (address,))
+        db_check = cur2.fetchone()
+        cur2.close()
+        conn2.close()
+        if db_check:
+            return jsonify({
+                "role": "none",
+                "status": "incomplete",
+                "error": "Registrasi belum lengkap.",
+                "message": "Akun Anda ditemukan di database, tetapi transaksi blockchain belum selesai. Silakan registrasi ulang."
+            }), 202
+    except Exception:
+        pass
+
     return jsonify({
         "role": "none",
-        "error": "Alamat wallet belum terdaftar di Blockchain.",
+        "error": "Alamat wallet belum terdaftar.",
         "message": "Silakan masuk ke halaman Registrasi terlebih dahulu."
     }), 404
+
+@app.route("/admin/view-document/<address>", methods=["GET"])
+def admin_view_doc(address):
+    try:
+        checksum_addr = web3.to_checksum_address(address)
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT document_cid FROM user_auth WHERE LOWER(wallet_address) = LOWER(%s)", (checksum_addr,))
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        if not row or not row['document_cid']:
+            return jsonify({"error": "Dokumen tidak ditemukan"}), 404
+
+        from services.security_service import decrypt_file
+        from flask import Response
+        
+        # Ambil dari IPFS
+        encrypted_doc = get_json_from_ipfs(row['document_cid'])
+        if not encrypted_doc:
+            return jsonify({"error": "Gagal mengambil dokumen dari IPFS"}), 500
+
+        # Dekripsi
+        file_bytes, mime_type = decrypt_file(encrypted_doc, checksum_addr)
+        
+        return Response(file_bytes, mimetype=mime_type)
+    except Exception as e:
+        print(f"❌ Error View Doc: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/admin/verify/approve", methods=["POST"])
+def admin_approve_doctor():
+    try:
+        data = request.json
+        doctor_addr = data.get("address")
+        if not doctor_addr:
+            return jsonify({"error": "Alamat wallet diperlukan"}), 400
+            
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        # Menggunakan LOWER untuk keamanan case-sensitivity
+        cursor.execute("UPDATE user_auth SET verification_status = 'verified', rejection_reason = NULL WHERE LOWER(wallet_address) = LOWER(%s)", (doctor_addr,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        # Catat notifikasi sukses
+        add_notification(doctor_addr, "Akun Anda telah berhasil diverifikasi oleh Admin. Selamat bekerja!")
+        
+        return jsonify({"status": "success", "message": "Dokter berhasil diverifikasi"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/admin/verify/reject", methods=["POST"])
+def admin_reject_doctor():
+    try:
+        data = request.json
+        doctor_addr = data.get("address")
+        reason = data.get("reason", "Dokumen tidak valid, silakan upload ulang")
+        if not doctor_addr:
+            return jsonify({"error": "Alamat wallet diperlukan"}), 400
+            
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE user_auth SET verification_status = 'rejected', rejection_reason = %s WHERE LOWER(wallet_address) = LOWER(%s)", (reason, doctor_addr))
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        # Catat notifikasi
+        add_notification(doctor_addr, f"Verifikasi ditolak: {reason}. Silakan upload ulang dokumen Anda.")
+        
+        return jsonify({"status": "success", "message": "Dokter berhasil ditolak"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/admin/deactivate-doctor", methods=["POST"])
+def admin_deactivate_doctor():
+    """Nonaktifkan dokter yang sudah diapprove.
+    Reset verification_status ke 'pending' di DB dan hapus approvedDoctor di blockchain (via rejectDoctor).
+    Front-end memanggil contract.rejectDoctor() secara langsung melalui MetaMask,
+    endpoint ini hanya update status di DB dan kirim notifikasi.
+    """
+    try:
+        data = request.json
+        doctor_addr = data.get("address")
+        if not doctor_addr:
+            return jsonify({"error": "Alamat wallet diperlukan"}), 400
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE user_auth SET verification_status = 'pending', rejection_reason = NULL WHERE LOWER(wallet_address) = LOWER(%s)",
+            (doctor_addr,)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        add_notification(doctor_addr, "Akun Anda telah dinonaktifkan oleh Admin. Silakan hubungi administrator.")
+        return jsonify({"status": "success", "message": "Dokter berhasil dinonaktifkan"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/auth/status/<address>", methods=["GET"])
+def get_user_status(address):
+    try:
+        checksum_addr = web3.to_checksum_address(address)
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT verification_status, rejection_reason FROM user_auth WHERE LOWER(wallet_address) = LOWER(%s)", (checksum_addr,))
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        
+        if row:
+            return jsonify(row), 200
+        return jsonify({"error": "User tidak ditemukan"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/auth/check-role/<address>", methods=["GET"])
+def check_role(address):
+    """Cek role dari blockchain tanpa autentikasi password.
+    Digunakan oleh checkStatus di AuthContext untuk dokter yang baru di-approve."""
+    try:
+        checksum_addr = web3.to_checksum_address(address)
+        doc_info = contract.functions.doctors(checksum_addr).call()
+        # doc_info: [name, specialty, isApproved, isRegistered]
+        if doc_info[3] and doc_info[2]:  # isRegistered AND isApproved
+            role = "herbal_doctor" if "herbal" in doc_info[1].lower() else "doctor"
+            return jsonify({"role": role, "name": doc_info[0], "specialty": doc_info[1]}), 200
+        return jsonify({"role": "doctor", "name": doc_info[0]}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/auth/register", methods=["POST", "OPTIONS"])
 def register_api():
     if request.method == "OPTIONS":
         return jsonify({"status": "OK"}), 200
-    data = request.json
+    # FIX: Ambil data secara fleksibel (JSON atau Form Data)
+    if request.is_json:
+        data = request.json
+    else:
+        # Untuk multipart/form-data (saat upload file)
+        data = request.form
+
     try:
         address = web3.to_checksum_address(data.get("address"))
     except Exception:
@@ -276,14 +437,29 @@ def register_api():
             conn.close()
             return jsonify({"error": "Wallet sudah terdaftar di basis data"}), 409
 
-        cursor.execute("INSERT INTO user_auth (wallet_address, name, password_hash) VALUES (%s, %s, %s)", (address, name, hashed_pw))
+        # Handle Document Upload for Doctors
+        doc_cid = None
+        if role == "doctor":
+            file = request.files.get("document")
+            if file:
+                from services.security_service import encrypt_file
+                file_bytes = file.read()
+                mime_type = file.content_type
+                encrypted_doc = encrypt_file(file_bytes, address, mime_type)
+                doc_cid = upload_json_to_ipfs(encrypted_doc)
+                print(f"🔐 Doctor document encrypted & uploaded: {doc_cid}")
+
+        cursor.execute(
+            "INSERT INTO user_auth (wallet_address, name, password_hash, document_cid, verification_status) VALUES (%s, %s, %s, %s, %s)", 
+            (address, name, hashed_pw, doc_cid, 'pending' if role == 'doctor' else 'verified')
+        )
         conn.commit()
         cursor.close()
         conn.close()
 
         return jsonify({
             "status": "success",
-            "message": "Password tersimpan. Silakan selesaikan transaksi blockchain.",
+            "message": "Data tersimpan. Silakan selesaikan transaksi blockchain.",
             "address": address,
             "role": role
         }), 200
@@ -291,6 +467,46 @@ def register_api():
     except Exception as e:
         print(f"❌ Error: {e}")
         return jsonify({"error": str(e)}), 500
+
+@app.route("/auth/reupload-document", methods=["POST", "OPTIONS"])
+def reupload_document():
+    """Endpoint untuk dokter yang ditolak agar bisa upload ulang dokumen STR/SIP.
+    Berbeda dengan /register yang akan 409 jika wallet sudah ada.
+    """
+    if request.method == "OPTIONS":
+        return jsonify({"status": "OK"}), 200
+    try:
+        address = web3.to_checksum_address(request.form.get("address"))
+    except Exception:
+        return jsonify({"error": "Format alamat wallet tidak valid"}), 400
+
+    file = request.files.get("document")
+    if not file:
+        return jsonify({"error": "File dokumen diperlukan"}), 400
+
+    try:
+        from services.security_service import encrypt_file
+        file_bytes = file.read()
+        mime_type = file.content_type
+        encrypted_doc = encrypt_file(file_bytes, address, mime_type)
+        doc_cid = upload_json_to_ipfs(encrypted_doc)
+        print(f"🔐 Re-upload dokumen dokter terenkripsi: {doc_cid}")
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE user_auth SET document_cid = %s, verification_status = 'pending', rejection_reason = NULL WHERE LOWER(wallet_address) = LOWER(%s)",
+            (doc_cid, address)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return jsonify({"status": "success", "message": "Dokumen berhasil diunggah ulang. Menunggu verifikasi."}), 200
+    except Exception as e:
+        print(f"❌ Error re-upload: {e}")
+        return jsonify({"error": str(e)}), 500
+
 
 @app.route("/admin/dashboard/stats", methods=["GET"])
 def get_admin_dashboard_stats():
@@ -379,15 +595,32 @@ def get_all_users_admin():
             # doc structure: [name, specialty, isApproved, isRegistered]
             if doc[3]:  # isRegistered
                 role_label = "Dokter Herbal" if "herbal" in doc[1].lower() else "Dokter Medis"
-                if doc[2]:  # isApproved
+                
+                # FIX: Ambil status dari database untuk akurasi alasan penolakan
+                db_conn = get_db_connection()
+                db_cursor = db_conn.cursor(dictionary=True)
+                db_cursor.execute("SELECT verification_status, rejection_reason, document_cid FROM user_auth WHERE LOWER(wallet_address) = LOWER(%s)", (checksum_acc,))
+                db_user = db_cursor.fetchone()
+                db_cursor.close()
+                db_conn.close()
+
+                status = "pending"
+                rejection_reason = None
+                doc_cid = None
+                if db_user:
+                    status = db_user['verification_status']
+                    rejection_reason = db_user['rejection_reason']
+                    doc_cid = db_user['document_cid']
+                elif doc[2]: # fallback ke blockchain jika tidak ada di DB (misal data legacy)
                     status = "active"
-                else:
-                    status = "pending"
+
                 users.append({
                     "name": doc[0] or "Tanpa Nama",
                     "address": checksum_acc,
                     "role": role_label,
-                    "status": status
+                    "status": status,
+                    "rejection_reason": rejection_reason,
+                    "document_cid": doc_cid
                 })
 
         return jsonify({"status": "success", "users": users, "total": len(users)}), 200
@@ -765,9 +998,18 @@ def get_medical_list_api():
                     # bc_rec adalah tuple: (cid, timestamp, createdBy, isActive)
                     cid = bc_rec[0] if isinstance(bc_rec, (list, tuple)) else getattr(bc_rec, 'cid', '')
                     ts  = bc_rec[1] if isinstance(bc_rec, (list, tuple)) else getattr(bc_rec, 'timestamp', 0)
+                    created_by = bc_rec[2] if isinstance(bc_rec, (list, tuple)) else getattr(bc_rec, 'createdBy', '')
                     is_active = bool(bc_rec[3] if isinstance(bc_rec, (list, tuple)) else getattr(bc_rec, 'isActive', False))
 
-                    print(f"📋 [LIST] Patient={p_addr[:8]}... | idx={j} | CID={cid[:12]}... | isActive={is_active}")
+                    # ✅ FIX ISSUE 4: Filter hanya record yang DIBUAT oleh dokter yang login
+                    # Jika createdBy bukan dokter ini, skip — dokter lain tidak boleh lihat/edit/hapus
+                    try:
+                        if web3.to_checksum_address(created_by) != doc_checksum:
+                            continue
+                    except Exception:
+                        continue  # Jika address tidak valid, skip
+
+                    print(f"📋 [LIST] Patient={p_addr[:8]}... | idx={j} | CID={cid[:12]}... | isActive={is_active} | by={str(created_by)[:8]}...")
 
                     # 4. Ambil diagnosa dari IPFS (gunakan helper yang sudah termasuk dekripsi AES)
                     diagnosis_text = ""
@@ -960,11 +1202,15 @@ def delete_medical_by_cid():
 @app.route("/auth/patients", methods=["GET"]) 
 def get_all_patients():
     try:
-        all_accounts = web3.eth.accounts
+        # Gunakan getAllUsers() bukan web3.eth.accounts agar semua pengguna ter-scan
+        all_user_addrs = contract.functions.getAllUsers().call()
+        admin_addr = contract.functions.admin().call()
         patient_list = []
         
-        for acc in all_accounts:
+        for acc in all_user_addrs:
             checksum_acc = web3.to_checksum_address(acc)
+            if checksum_acc == admin_addr:
+                continue
             name = contract.functions.patientNames(checksum_acc).call()
             
             if name != "" and name is not None:
@@ -980,23 +1226,22 @@ def get_all_patients():
 @app.route("/auth/doctors", methods=["GET"])
 def get_all_doctors():
     try:
-        all_accounts = web3.eth.accounts
-        doctor_list = [] # Kita ubah jadi list of objects
+        # Gunakan getAllUsers() bukan web3.eth.accounts agar semua dokter ter-scan
+        all_user_addrs = contract.functions.getAllUsers().call()
+        admin_addr = contract.functions.admin().call()
+        doctor_list = []
         
-        for acc in all_accounts:
+        for acc in all_user_addrs:
             checksum_acc = web3.to_checksum_address(acc)
-            # 1. Cek apakah dokter terverifikasi
-            is_verified = contract.functions.verifiedDoctor(checksum_acc).call()
-            
-            if is_verified:
-                # 2. Ambil info lengkap dokter dari Mapping 'doctors' di Blockchain
-                # Biasanya returns: [name, specialty, isApproved, isRegistered]
-                doc_info = contract.functions.doctors(checksum_acc).call()
-                
-                # 3. Masukkan Alamat dan Nama ke dalam list
+            if checksum_acc == admin_addr:
+                continue
+            # Cek apakah dokter terverifikasi (isApproved di blockchain)
+            doc_info = contract.functions.doctors(checksum_acc).call()
+            # doc_info: [name, specialty, isApproved, isRegistered]
+            if doc_info[3] and doc_info[2]:  # isRegistered AND isApproved
                 doctor_list.append({
                     "address": checksum_acc,
-                    "name": doc_info[0] # doctor_info[0] biasanya adalah NAMA
+                    "name": doc_info[0]
                 })
         
         return jsonify({"doctors": doctor_list}), 200

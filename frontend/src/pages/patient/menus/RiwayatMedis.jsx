@@ -100,13 +100,17 @@ const RiwayatMedis = ({ medicalRecords = [] }) => {
         .subtitle { font-size: 13px; color: #777; margin: 4px 0 25px 0; }
         .card-white { background: white; border-radius: 20px; border: 1px solid #f0f0f0; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.02); }
         .table-container { width: 100%; overflow-x: auto; }
-        .medical-table { width: 100%; border-collapse: collapse; text-align: left; }
+        .medical-table { width: 100%; border-collapse: collapse; text-align: left; table-layout: fixed; }
         .medical-table th { background: #fafafa; padding: 15px 20px; font-size: 11px; text-transform: uppercase; color: #666; border-bottom: 1px solid #eee; }
+        .medical-table th:nth-child(1) { width: 18%; }
+        .medical-table th:nth-child(2) { width: 40%; }
+        .medical-table th:nth-child(3) { width: 22%; }
+        .medical-table th:nth-child(4) { width: 20%; }
         .th-content { display: flex; align-items: center; gap: 8px; }
-        .medical-table td { padding: 18px 20px; border-bottom: 1px solid #f9f9f9; font-size: 13px; color: #444; }
-        .diagnosis-badge { background: #e8f5e9; color: #2e7d32; padding: 6px 12px; border-radius: 8px; font-weight: 600; font-size: 12px; display: inline-block;}
+        .medical-table td { padding: 18px 20px; border-bottom: 1px solid #f9f9f9; font-size: 13px; color: #444; vertical-align: top; }
+        .diagnosis-badge { background: #e8f5e9; color: #2e7d32; padding: 6px 12px; border-radius: 8px; font-weight: 600; font-size: 12px; display: inline-block; word-wrap: break-word; overflow-wrap: break-word; white-space: normal; max-width: 100%; }
         .doctor-wallet { font-family: sans-serif; color: #1976d2; background: #e3f2fd; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; }
-        .td-cid code { color: #888; font-size: 11px; }
+        .td-cid code { color: #888; font-size: 11px; word-break: break-all; }
         .empty-state { padding: 60px; text-align: center; color: #aaa; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>

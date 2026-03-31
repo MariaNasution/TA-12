@@ -1,7 +1,29 @@
-import React from 'react';
-import { Clock, CheckCircle, XCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { Clock, CheckCircle, XCircle, Eye, FileText, X } from 'lucide-react';
 
 const VerifikasiAkun = ({ pendingList, onApprove, onReject }) => {
+  const [selectedDoc, setSelectedDoc] = useState(null); // { address: string, name: string }
+  const [isRejecting, setIsRejecting] = useState(null); // { id: string, name: string }
+  const [rejectReason, setRejectReason] = useState("");
+
+  const handlePreview = (address, name) => {
+    setSelectedDoc({ address, name });
+  };
+
+  const closePreview = () => setSelectedDoc(null);
+
+  const startReject = (id, name) => {
+    setIsRejecting({ id, name });
+    setRejectReason("");
+  };
+
+  const confirmReject = () => {
+    if (isRejecting) {
+      onReject(isRejecting.id, isRejecting.name, rejectReason);
+      setIsRejecting(null);
+    }
+  };
+
   return (
     <div className="verifikasi-container">
       {/* Header */}
@@ -14,6 +36,53 @@ const VerifikasiAkun = ({ pendingList, onApprove, onReject }) => {
       <div className="info-banner">
         <p>Tinjau dokumen dan informasi pendaftar baru sebelum mengaktifkan akun mereka.</p>
       </div>
+
+      {/* MODAL PRATINJAU DOKUMEN */}
+      {selectedDoc && (
+        <div className="modal-overlay">
+          <div className="modal-content large">
+            <div className="modal-header">
+              <h3>Pratinjau Dokumen: {selectedDoc.name}</h3>
+              <button onClick={closePreview} className="close-btn"><X size={20} /></button>
+            </div>
+            <div className="modal-body doc-preview">
+              {/* Gunakan iframe untuk PDF atau img untuk Gambar. Backend /admin/view-document/<address> akan otomatis handles mime-type */}
+              <iframe 
+                src={`http://127.0.0.1:5000/admin/view-document/${selectedDoc.address}`} 
+                width="100%" 
+                height="500px" 
+                style={{ border: 'none', borderRadius: '8px' }}
+                title="Document Preview"
+              ></iframe>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ALASAN PENOLAKAN */}
+      {isRejecting && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h3>Tolak Pendaftaran: {isRejecting.name}</h3>
+              <button onClick={() => setIsRejecting(null)} className="close-btn"><X size={20} /></button>
+            </div>
+            <div className="modal-body">
+              <label style={{ display: 'block', marginBottom: '10px', fontSize: '14px' }}>Alasan Penolakan:</label>
+              <textarea 
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="Contoh: Dokumen STR tidak terbaca atau sudah kadaluwarsa."
+                style={{ width: '100%', minHeight: '100px', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '14px' }}
+              />
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => setIsRejecting(null)} className="btn-cancel">Batal</button>
+              <button onClick={confirmReject} className="btn-confirm-reject">Kirim Penolakan</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Card */}
       <div className="verifikasi-card">
@@ -39,11 +108,12 @@ const VerifikasiAkun = ({ pendingList, onApprove, onReject }) => {
                   <span className="status-badge">Menunggu</span>
                 </div>
 
-                {/* Detail Info Row (kosong sesuai instruksi) */}
+                {/* Detail Info Row (Dokumen) */}
                 <div className="item-detail">
-                  <p className="detail-text">
-                    {/* Kosong, bisa diisi nanti */}
-                  </p>
+                  <button className="btn-view-doc" onClick={() => handlePreview(user.id, user.name)}>
+                    <FileText size={16} />
+                    Lihat Dokumen STR/SIP
+                  </button>
                 </div>
 
                 {/* Action Buttons */}
@@ -57,7 +127,7 @@ const VerifikasiAkun = ({ pendingList, onApprove, onReject }) => {
                   </button>
                   <button 
                     className="btn-reject" 
-                    onClick={() => onReject(user.id, user.name)}
+                    onClick={() => startReject(user.id, user.name)}
                   >
                     <XCircle size={15} />
                     Tolak
@@ -171,12 +241,21 @@ const VerifikasiAkun = ({ pendingList, onApprove, onReject }) => {
         .item-detail {
           margin: 10px 0 14px 62px;
         }
-        .detail-text {
-          font-size: 13px;
-          color: #666;
-          margin: 0;
-          line-height: 1.6;
+        .btn-view-doc {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 16px;
+          background: #f0f4f8;
+          border: 1px solid #d1d5db;
+          border-radius: 8px;
+          color: #1f2937;
+          font-size: 12.5px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s;
         }
+        .btn-view-doc:hover { background: #e2e8f0; border-color: #9ca3af; }
 
         .item-actions {
           display: flex;
@@ -224,6 +303,39 @@ const VerifikasiAkun = ({ pendingList, onApprove, onReject }) => {
           color: #c62828;
         }
 
+        /* Modal Styles */
+        .modal-overlay {
+          position: fixed;
+          top: 0; left: 0; width: 100vw; height: 100vh;
+          background: rgba(0,0,0,0.5);
+          display: flex; align-items: center; justify-content: center;
+          z-index: 1000;
+        }
+        .modal-content {
+          background: white; border-radius: 16px; padding: 24px;
+          width: 90%; maxWidth: 500px;
+          box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
+          animation: modalIn 0.3s ease;
+        }
+        .modal-content.large { maxWidth: 800px; }
+        .modal-header {
+           display: flex; justify-content: space-between; align-items: center;
+           margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid #f3f4f6;
+        }
+        .modal-header h3 { margin: 0; font-size: 18px; color: #111; }
+        .close-btn { background: none; border: none; cursor: pointer; color: #999; }
+        .modal-footer {
+          display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;
+        }
+        .btn-cancel {
+          padding: 10px 20px; background: white; border: 1px solid #ddd;
+          border-radius: 8px; cursor: pointer; font-size: 14px;
+        }
+        .btn-confirm-reject {
+          padding: 10px 20px; background: #e53e3e; color: white; border: none;
+          border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;
+        }
+
         .empty-state {
           text-align: center;
           padding: 50px 20px;
@@ -237,6 +349,10 @@ const VerifikasiAkun = ({ pendingList, onApprove, onReject }) => {
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(10px); }
           to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes modalIn {
+          from { opacity: 0; transform: scale(0.95); }
+          to { opacity: 1; transform: scale(1); }
         }
       `}</style>
     </div>

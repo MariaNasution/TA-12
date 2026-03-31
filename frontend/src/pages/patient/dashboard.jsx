@@ -85,7 +85,7 @@ const formattedRecords = await Promise.all(records.map(async (r, index) => {
     });
 
     try {
-        const res = await fetch(`http://localhost:5000/medical/get-content?cid=${r.cid}`);
+        const res = await fetch(`http://localhost:5000/medical/get-content?cid=${r.cid}&patient=${address}`);
         if (!res.ok) return null;
         
         const textData = await res.text();
@@ -300,7 +300,11 @@ setMedicalRecords(finalData);
   };
 
   useEffect(() => { 
-    if (!loading && address && role === 'patient') loadRequests(); loadRekomendasiCount(); loadNotifications();
+    if (!loading && address && role === 'patient') {
+      loadRequests();
+      loadRekomendasiCount();
+      loadNotifications();
+    }
   }, [address, loading, role]);
 
   if (loading) return <p style={{textAlign: 'center', padding: '50px'}}>Memverifikasi Blockchain...</p>;
