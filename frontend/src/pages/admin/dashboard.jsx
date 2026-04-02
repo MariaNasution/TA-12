@@ -31,7 +31,6 @@ export default function AdminDashboard() {
     }
     if (role !== 'admin') {
       router.replace('/login');
-      return;
     }
   }, [authLoading, isAuthenticated, role, router]);
 
@@ -62,7 +61,7 @@ export default function AdminDashboard() {
     }
   }, [authLoading, role, activeTab, fetchAdminStats]);
 
-  // --- HANDLE APPROVE (BLOCKCHAIN TRANSACTION) ---
+  // --- HANDLE APPROVE (BLOCKCHAIN TRANSACTION + MYSQL SYNC) ---
   const handleApprove = async (targetAddr, name) => {
     try {
       const provider = new ethers.providers.Web3Provider(window.ethereum);
@@ -73,17 +72,24 @@ export default function AdminDashboard() {
       const tx = await contract.approveDoctor(targetAddr);
       await tx.wait(); // Tunggu konfirmasi Blockchain
 
-      alert(`Berhasil! pendaftarab akun telah disetujui.`);
+      // Sinkronisasi ke Database
+      const res = await fetch("http://127.0.0.1:5000/admin/verify/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address: targetAddr })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gagal update database");
+
+      alert(`Berhasil! Pendaftaran akun dr. ${name} telah disetujui.`);
       fetchAdminStats(); // Refresh tampilan otomatis
     } catch (error) {
-      alert("Gagal Approve: " + error.message);
+      alert("Gagal Approve: " + (error.data?.message || error.message));
     }
   };
 
-  // --- HANDLE REJECT (BLOCKCHAIN TRANSACTION) ---
-  const handleReject = async (targetAddr, name) => {
-    if (!window.confirm(`Tolak dan hapus pendaftaran dr. ${name}?`)) return;
-
+  // --- HANDLE REJECT (BLOCKCHAIN TRANSACTION + MYSQL SYNC) ---
+  const handleReject = async (targetAddr, name, reason) => {
     try {
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = provider.getSigner();
@@ -94,10 +100,19 @@ export default function AdminDashboard() {
       const tx = await contract.rejectDoctor(targetAddr);
       await tx.wait();
 
-      alert(`❌ Pendaftaran dr. ${name} telah dihapus dari Blockchain.`);
+      // Sinkronisasi ke Database (Menyimpan alasan penolakan)
+      const res = await fetch("http://127.0.0.1:5000/admin/verify/reject", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address: targetAddr, reason: reason })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gagal update database");
+
+      alert(`❌ Pendaftaran dr. ${name} telah ditolak.`);
       fetchAdminStats(); // Refresh tampilan otomatis
     } catch (error) {
-      alert("Gagal Reject: " + error.message);
+      alert("Gagal Reject: " + (error.data?.message || error.message));
     }
   };
 
