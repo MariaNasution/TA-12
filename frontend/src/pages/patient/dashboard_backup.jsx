@@ -49,13 +49,9 @@ const loadRequests = async () => {
 
         console.log("🔄 --- SINKRONISASI DASHBOARD PASIEN ---");
 
-        // 1. Ambil SEMUA data dari Blockchain (Sekarang mengembalikan data mentah tanpa filter)
         const records = await contract.getMedicalRecords(patientChecksum); 
         
-        // 2. Proses dan Filter di sisi Frontend
         const formattedRecords = await Promise.all(records.map(async (r, index) => {
-            // --- 🛡️ FILTER STATUS AKTIF ---
-            // Karena Smart Contract sekarang mengirim semua, kita filter di sini:
             const isActuallyActive = r.isActive !== undefined ? r.isActive : r[3];
             
             if (isActuallyActive === false) {
@@ -64,7 +60,6 @@ const loadRequests = async () => {
             }
 
             try {
-                // Ambil diagnosa dari Flask
                 const res = await fetch(`http://localhost:5000/medical/get-content?cid=${r.cid}`);
                 if (!res.ok) return null; 
 
@@ -81,14 +76,13 @@ const loadRequests = async () => {
                     cid: r.cid,
                     timestamp: r.timestamp.toNumber ? r.timestamp.toNumber() : r.timestamp,
                     diagnosis: diagnosisText,
-                    blockchainIndex: index // Index ini sekarang tetap konsisten!
+                    blockchainIndex: index 
                 };
             } catch (err) {
                 return null; 
             }
         }));
 
-        // 3. Bersihkan data null dan Urutkan
         const finalData = formattedRecords
             .filter(r => r !== null)
             .sort((a, b) => b.timestamp - a.timestamp);
@@ -96,7 +90,6 @@ const loadRequests = async () => {
         setMedicalRecords(finalData);
         console.log("Tabel Pasien diperbarui dengan data aktif.");
 
-        // --- 4. AMBIL STATUS PERIZINAN DOKTER ---
         const resDocs = await fetch("http://127.0.0.1:5000/auth/doctors");
         const dataDocs = await resDocs.json();
         const allDoctors = dataDocs.doctors || [];
@@ -131,7 +124,6 @@ const loadRequests = async () => {
     }
 };
 
-    // 1. Fungsi Menolak (Reject)
     const handleReject = async (docAddr) => {
         setIsProcessing(true);
         try {
@@ -147,7 +139,6 @@ const loadRequests = async () => {
         finally { setIsProcessing(false); }
     };
 
-    // 2. Fungsi Mencabut Izin (Revoke)
     const handleRevoke = async (docAddr) => {
         setIsProcessing(true);
         try {
@@ -303,7 +294,6 @@ const loadRequests = async () => {
                 <p style={{ color: '#888' }}>Belum ada dokter yang diberi izin.</p>
             ) : (
                 approvedDocs.map((doc, index) => (
-                    // Gunakan 'index' sebagai key agar lebih aman
                     <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', borderRadius: '8px', background: '#eaffea', border: '1px solid #c3e6cb', marginBottom: '10px' }}>
                         <div>
                             {/* Tampilkan NAMA dokternya */}

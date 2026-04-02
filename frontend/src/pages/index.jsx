@@ -11,7 +11,6 @@ export default function HomePage() {
   useEffect(() => {
     if (loading) return;
 
-    // Jika belum authenticated, arahkan ke register
     if (!isAuthenticated) {
       if (isConnected && address) {
         router.push('/login');
@@ -19,13 +18,11 @@ export default function HomePage() {
       return;
     }
 
-    // Jika authenticated tapi status pending, arahkan ke pending-verification
     if (status === 'pending_approval') {
       router.push('/pending-verification');
       return;
     }
 
-    // Authenticated dan approved → arahkan ke dashboard sesuai role
     if (role === 'patient') {
       router.push('/patient/dashboard');
     } else if (role === 'herbal_doctor') {
@@ -35,7 +32,6 @@ export default function HomePage() {
     } else if (role === 'admin') {
       router.push('/admin/dashboard');
     } else {
-      // Role tidak dikenali atau belum terdaftar
       router.push('/login');
     }
   }, [role, status, isConnected, isAuthenticated, loading, address, router]);

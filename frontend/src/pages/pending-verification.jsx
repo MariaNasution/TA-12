@@ -10,7 +10,6 @@ const PendingVerification = () => {
   const [statusInfo, setStatusInfo] = useState({ status: 'pending', reason: '' });
   const [loading, setLoading] = useState(true);
   
-  // State for re-upload
   const [showReupload, setShowReupload] = useState(false);
   const [newFile, setNewFile] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -30,7 +29,6 @@ const PendingVerification = () => {
         }
       }
     } catch (err) {
-      // Jika 404, mungkin data sedang sinkronisasi, jangan log sebagai error keras dulu
       if (err.response?.status === 404) {
         console.warn("Status belum tersedia di database, mencoba sinkronisasi...");
       } else {
@@ -54,9 +52,8 @@ const PendingVerification = () => {
       const formData = new FormData();
       formData.append("address", address);
       formData.append("document", newFile);
-      formData.append("role", "doctor"); // backend update Logic
+      formData.append("role", "doctor"); 
       
-      // Gunakan endpoint khusus reupload agar tidak trigger 409 duplicate
       const res = await axios.post('http://127.0.0.1:5000/auth/reupload-document', formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
       });
@@ -271,4 +268,4 @@ const PendingVerification = () => {
   );
 };
 
-export default PendingVerification;
+export default PendingVerification;

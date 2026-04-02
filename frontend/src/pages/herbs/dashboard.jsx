@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar from '../../components/Sidebar';
 import BerandaHerbal from './BerandaHerbal';
 import KatalogHerbal from './KatalogHerbal'; 
-import TambahHerbal from './TambahHerbal'; // Pastikan diimpor
+import TambahHerbal from './TambahHerbal'; 
 import ProfilSaya from '../../components/ProfilSaya';
 import { useAuth } from '../../context/AuthContext';
 import { useRouter } from 'next/router';
@@ -17,7 +17,6 @@ export default function HerbalDoctorDashboard() {
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
-  // AUTH GUARD: Pastikan user authenticated, role benar, dan bukan pending
   useEffect(() => {
     if (loading) return;
     if (!isAuthenticated) {
@@ -42,7 +41,7 @@ export default function HerbalDoctorDashboard() {
   });
 
   const fetchHerbalData = useCallback(async () => {
-  if (!address) return; // ⛔ penting
+  if (!address) return; 
 
   console.log("🔄 [DEBUG] Memulai Fetch Data Herbal (Auto-Sync)...");
 
@@ -60,7 +59,7 @@ export default function HerbalDoctorDashboard() {
     setIsInitialLoading(false);
   }
 
-}, [address]); // ✅ WAJIB ADA
+}, [address]); 
   useEffect(() => {
     if (!loading && address && role === 'herbal_doctor') {
       console.log(" [DEBUG] Auth siap, menarik data untuk:", address);
@@ -79,7 +78,6 @@ export default function HerbalDoctorDashboard() {
         ? `http://localhost:5000/herbal/update/${form.id}`
         : "http://localhost:5000/herbal/store";
 
-      // A. Kirim ke Flask
       const response = await fetch(url, {
         method: isUpdate ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -108,7 +106,7 @@ export default function HerbalDoctorDashboard() {
       
       await fetchHerbalData(); 
       setForm({ id: null, name: "", indikasi: "", kontraindikasi: "" });
-      setActiveTab('katalog'); // Otomatis pindah ke tabel setelah simpan
+      setActiveTab('katalog'); 
       
     } catch (error) {
       console.error("❌ [DEBUG] Error saat simpan:", error);
@@ -123,7 +121,6 @@ export default function HerbalDoctorDashboard() {
     }
   };
 
-  // --- 3. HANDLE DELETE (Sesuai Kode Lama) ---
   const handleDelete = async (id) => {
     if (!window.confirm("Hapus data dari AI dan catat di Blockchain?")) return;
     setIsSaving(true);
@@ -151,7 +148,6 @@ export default function HerbalDoctorDashboard() {
     }
   };
 
-  // --- 4. HANDLE EDIT (Perbaikan: Isi Form + Pindah Tab) ---
   const prepareEdit = (herb) => {
     console.log("✏️ [DEBUG] Mempersiapkan Edit untuk:", herb.nama);
     setForm({
@@ -161,10 +157,8 @@ export default function HerbalDoctorDashboard() {
       kontraindikasi: herb.kontraindikasi,
     });
     
-    // KUNCI: Pindah ke tab input agar form muncul di layar
     setActiveTab('input'); 
     
-    // Scroll ke atas agar form terlihat jelas
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 

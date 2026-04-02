@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { Clock, CheckCircle, XCircle, Eye, FileText, X } from 'lucide-react';
 
 const VerifikasiAkun = ({ pendingList, onApprove, onReject }) => {
-  const [selectedDoc, setSelectedDoc] = useState(null); // { address: string, name: string }
-  const [isRejecting, setIsRejecting] = useState(null); // { id: string, name: string }
+  const [selectedDoc, setSelectedDoc] = useState(null); 
+  const [isRejecting, setIsRejecting] = useState(null); 
   const [rejectReason, setRejectReason] = useState("");
 
   const handlePreview = (address, name) => {
@@ -46,7 +46,7 @@ const VerifikasiAkun = ({ pendingList, onApprove, onReject }) => {
               <button onClick={closePreview} className="close-btn"><X size={20} /></button>
             </div>
             <div className="modal-body doc-preview">
-              {/* Gunakan iframe untuk PDF atau img untuk Gambar. Backend /admin/view-document/<address> akan otomatis handles mime-type */}
+              {/* Gunakan iframe untuk PDF atau img untuk Gambar. */}
               <iframe 
                 src={`http://127.0.0.1:5000/admin/view-document/${selectedDoc.address}`} 
                 width="100%" 

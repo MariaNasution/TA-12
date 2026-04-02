@@ -12,7 +12,6 @@ export default function LoginPage() {
     const [adminAddress, setAdminAddress] = useState(null);
     const [isCheckingAdmin, setIsCheckingAdmin] = useState(true)
 
-    // Custom UI Notifications States
     const [toast, setToast] = useState(null);
     const [popup, setPopup] = useState(null);
     const [inlineError, setInlineError] = useState("");
@@ -52,14 +51,13 @@ export default function LoginPage() {
         }
         try {
             await connectWallet();
-            // Optional: showToast("Wallet terhubung", "success");
         } catch (error) {
             showToast("Gagal menghubungkan wallet", "error");
         }
     };
 
     const handleLogin = async () => {
-        setInlineError(""); // clear previous
+        setInlineError(""); 
         if (!address) return setPopup({ title: "Perhatian", message: "Harap hubungkan wallet MetaMask Anda terlebih dahulu." });
         if (!isAdmin && !password) return setInlineError("Password tidak boleh kosong!");
 
@@ -134,7 +132,6 @@ export default function LoginPage() {
                         <p style={{ fontSize: '0.85rem', color: '#718096' }}>⏳ Memverifikasi Otoritas Admin...</p>
                     </div>
                 ) : (
-                    /* 2. Jika pengecekan SELESAI dan ternyata BUKAN Admin, baru munculkan input password */
                     !isAdmin && (
                         <div style={{ marginBottom: '20px' }}>
                             <label style={{ display: 'block', marginBottom: '8px', color: '#4a5568' }}>Password:</label>

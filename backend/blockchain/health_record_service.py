@@ -16,11 +16,7 @@ except ImportError:
 
 
 def store_medical_record(doctor_pk, patient_addr, cid):
-    # Ambil alamat dokter dari Private Key
     doctor_account = web3.eth.account.from_key(doctor_pk)
-    
-    # Pastikan memanggil fungsi addRecord (atau nama fungsi di Solidity kamu)
-    # Dan parameter yang dikirim adalah 'cid' (bukan medical_data mentah)
     nonce = web3.eth.get_transaction_count(doctor_account.address)
     
     txn = contract.functions.storeMedicalRecord(patient_addr, cid).build_transaction({
@@ -36,7 +32,6 @@ def store_medical_record(doctor_pk, patient_addr, cid):
 
 def get_patient_medical_conditions(patient_address, doctor_address):
     try:
-        # Panggil blockchain hanya menggunakan alamat (tanpa tanda tangan PK)
         records = contract.functions.getMedicalRecords(patient_address).call({
             "from": doctor_address
         })
@@ -54,14 +49,13 @@ def get_patient_medical_conditions(patient_address, doctor_address):
         raw_data = get_json_from_ipfs(cid)
 
         if raw_data:
-            # Dekripsi data IPFS (legacy plaintext lolos otomatis jika tidak ada field "encrypted")
             try:
                 if _ENCRYPTION_ENABLED:
                     data = decrypt_data(raw_data, patient_address)
                 else:
                     data = raw_data
             except Exception:
-                data = raw_data  # Fallback: gunakan data mentah jika dekripsi gagal
+                data = raw_data  
 
             if data and "diagnosis" in data:
                 diag = data["diagnosis"]
@@ -72,7 +66,6 @@ def get_patient_medical_conditions(patient_address, doctor_address):
 
 def get_medical_records_as_doctor(patient_address, doctor_address):
     try:
-        # Pastikan doctor_address yang masuk di sini berasal dari session login React
         records = contract.functions.getMedicalRecords(patient_address).call({
             "from": doctor_address
         })
@@ -83,7 +76,7 @@ def get_medical_records_as_doctor(patient_address, doctor_address):
                 "timestamp": r[1],
                 "isActive": r[3] if len(r) > 3 else True
             }
-            for r in records if r[3] is True  # isActive ada di index 3: (cid, timestamp, createdBy, isActive)
+            for r in records if r[3] is True  
         ]
 
     except Exception as e:
@@ -137,7 +130,6 @@ def reject_access(patient_private_key, doctor_address):
 def request_access_from_doctor(doctor_private_key, patient_address):
     account = web3.eth.account.from_key(doctor_private_key)
     
-    # Memanggil fungsi requestAccess di Smart Contract
     tx = contract.functions.requestAccess(patient_address).build_transaction({
         "from": account.address,
         "nonce": web3.eth.get_transaction_count(account.address),

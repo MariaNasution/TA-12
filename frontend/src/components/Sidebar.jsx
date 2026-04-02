@@ -2,7 +2,6 @@ import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useRouter } from 'next/router';
 
-// IMPOR ICON DARI LUCIDE-REACT
 import { 
   Home, 
   Leaf, 
@@ -22,8 +21,6 @@ const Sidebar = ({ activeTab, setActiveTab, dokterCount, notifications = {} }) =
   const { address, role, userName, logout } = useAuth();
   const router = useRouter();
 
-  // KONFIGURASI MENU DENGAN COMPONENT ICON
-  // Ukuran icon diatur konsisten (misal: size={20})
   const menuConfig = {
     patient: [
       { id: 'beranda', label: 'Beranda', icon: <Home size={20} />, badgeKey: null },

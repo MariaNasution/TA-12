@@ -3,7 +3,6 @@ import { Settings, Clock, Trash2, CheckCircle } from 'lucide-react';
 
 const BerandaAdmin = ({ stats, pendingList, onApprove, onReject }) => {
   
-  // Data untuk Bar Komposisi (Gambar 2)
   const total = stats.total_pengguna || 1;
   const compositions = [
     { label: "Pasien", value: stats.pasien, color: "#4caf50" },

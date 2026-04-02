@@ -4,7 +4,6 @@ import { useAuth } from '../../context/AuthContext';
 import { CONTRACT_ADDRESS, HEALTH_RECORD_ABI } from '../../api/contract_abi';
 import { ethers } from 'ethers';
 
-// Helper untuk format tanggal dari IPFS timestamp (jika ada)
 const formatSimpleDate = (timestamp) => {
     if (!timestamp) return "";
     return new Date(timestamp).toLocaleDateString('id-ID', {
@@ -15,7 +14,7 @@ const formatSimpleDate = (timestamp) => {
 const PasienSaya = ({ changeTab }) => {
     const { address, role } = useAuth();
     const [loading, setLoading] = useState(true);
-    const [realPatients, setRealPatients] = useState([]); // <--- DATA REAL DI SINI
+    const [realPatients, setRealPatients] = useState([]); 
     const [searchTerm, setSearchTerm] = useState("");
 
     // ==========================================
@@ -53,11 +52,8 @@ const PasienSaya = ({ changeTab }) => {
 
     if (records && records.length > 0) {
         for (let rec of records) {
-            // Ambil isActive dari named property ATAU index [3]
-            // Struct: {cid[0], timestamp[1], createdBy[2], isActive[3]}
             const rawIsActive = rec.isActive !== undefined ? rec.isActive : rec[3];
             
-            // Konversi ke Boolean murni untuk menghindari ambiguitas Ethers.js
             const isActive = rawIsActive === true || rawIsActive === 1 || rawIsActive === "true";
 
             console.log(`📋 [DEBUG] Record CID=${rec.cid?.substring(0,12)}... | rawIsActive=${rawIsActive} | type=${typeof rawIsActive} | isActive=${isActive}`);
@@ -67,7 +63,6 @@ const PasienSaya = ({ changeTab }) => {
                 continue;
             }
 
-            // Record AKTIF: fetch konten dari IPFS (sudah termasuk dekripsi AES)
             try {
                 const resDiag = await fetch(
                     `http://127.0.0.1:5000/medical/get-content?cid=${rec.cid}&patient=${pChecksum}`
@@ -84,7 +79,6 @@ const PasienSaya = ({ changeTab }) => {
         }
     }
 
-    // Jika tidak ada diagnosa aktif, tampilkan placeholder
     if (allDiagnosisTags.length === 0) allDiagnosisTags = ["Belum ada diagnosa"];
 
     activeList.push({
@@ -114,7 +108,6 @@ const PasienSaya = ({ changeTab }) => {
         loadRealPatientsData();
     }, [address, role]);
 
-    // Filter Search
     const filteredPatients = realPatients.filter(p => 
         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.address.toLowerCase().includes(searchTerm.toLowerCase())

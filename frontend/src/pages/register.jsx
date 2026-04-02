@@ -16,18 +16,17 @@ export default function RegisterPage() {
     const [loading, setLoading] = useState(false);
     const [adminAddress, setAdminAddress] = useState(null);
 
-    // Custom UI Notifications States
     const [toast, setToast] = useState(null);
     const [popup, setPopup] = useState(null);
     const [inlineErrors, setInlineErrors] = useState({});
-    const [pendingRedirect, setPendingRedirect] = useState(null); // Track where to redirect after popup close
+    const [pendingRedirect, setPendingRedirect] = useState(null); 
 
     const fetchAdminFromChain = async () => {
         if (typeof window !== 'undefined' && window.ethereum) {
             try {
                 const provider = new ethers.providers.Web3Provider(window.ethereum);
                 const contract = new ethers.Contract(CONTRACT_ADDRESS, HEALTH_RECORD_ABI, provider);
-                const currentAdmin = await contract.admin(); // Panggil fungsi admin() di Smart Contract
+                const currentAdmin = await contract.admin(); 
                 setAdminAddress(currentAdmin.toLowerCase());
             } catch (error) {
                 console.error("Gagal fetch admin address:", error);
@@ -48,7 +47,7 @@ export default function RegisterPage() {
     const [documentFile, setDocumentFile] = useState(null);
 
     const handleRegister = async () => {
-        setInlineErrors({}); // clear previous errors
+        setInlineErrors({}); 
         
         if (typeof window === 'undefined' || !window.ethereum) {
             return setPopup({ title: "MetaMask Tidak Ditemukan", message: "Silakan install ekstensi MetaMask di browser Anda terlebih dahulu!" });
@@ -57,7 +56,6 @@ export default function RegisterPage() {
             return setPopup({ title: "Perhatian", message: "Harap hubungkan wallet MetaMask Anda terlebih dahulu." });
         }
 
-        // Inline Field Validations
         let errs = {};
         if (!name.trim()) errs.name = "Nama lengkap wajib diisi!";
         if (!password) errs.password = "Password tidak boleh kosong!";
@@ -76,7 +74,6 @@ export default function RegisterPage() {
             const signer = provider.getSigner();
             const contract = new ethers.Contract(CONTRACT_ADDRESS, HEALTH_RECORD_ABI, signer);
 
-            // 1. Simpan ke Backend (MySQL + Password + Document)
             const formData = new FormData();
             formData.append("address", address);
             formData.append("name", name);
@@ -99,7 +96,6 @@ export default function RegisterPage() {
                 return showToast("Gagal mendaftar ke server", "error");
             }
 
-            // 2. Lanjutkan ke Blockchain menggunakan Wallet Address sebagai Nama
             try {
                 if (role === 'patient') {
                     const tx = await contract.registerPatient(name);
@@ -112,7 +108,6 @@ export default function RegisterPage() {
                 } else {
                     const tx = await contract.registerDoctor(name, specialty);
                     await tx.wait();
-                    // Set session sebagai pending_approval agar langsung masuk ke pending-verification
                     const doctorRole = specialty.toLowerCase().includes('herbal') ? 'herbal_doctor' : 'doctor';
                     setSession({
                         address: address,

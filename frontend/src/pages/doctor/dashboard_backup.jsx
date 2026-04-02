@@ -42,9 +42,6 @@ export default function DoctorDashboard() {
         }
     }, [loading, address, role, fetchMedicalHistory, router]);
 
-    // ===========================
-    // 3. Persiapkan edit rekam medis
-    // ===========================
     const prepareEdit = (p, originalIndex) => {
         setPatientAddr(p.address);
         setMedicalData(p.diagnosis);
@@ -54,26 +51,21 @@ export default function DoctorDashboard() {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
-    // ===========================
-    // 4. Nonaktifkan rekam medis di blockchain
-    // ===========================
     const handleDeleteMedical = async (patientAddress, index, cid) => {
         if (!window.confirm("Hapus data ini?")) return;
         setTxLoading(true);
 
         try {
-            // 1. Hapus di AI menggunakan CID (Anti-Tukar)
             const resAI = await fetch(`http://127.0.0.1:5000/medical/delete-by-cid?cid=${cid}&patient=${patientAddress}`, {
                 method: "DELETE"
             });
 
-            // 2. Hapus di Blockchain menggunakan Index
             const provider = new ethers.providers.Web3Provider(window.ethereum);
             const signer = provider.getSigner();
             const contract = new ethers.Contract(CONTRACT_ADDRESS, HEALTH_RECORD_ABI, signer);
 
             const tx = await contract.deactivateMedicalRecord(patientAddress, index);
-            await tx.wait(); // Tunggu sampai benar-benar masuk blok
+            await tx.wait(); 
 
             alert("Berhasil dihapus di Blockchain dan AI!");
             fetchMedicalHistory();
@@ -95,15 +87,12 @@ const handleRequestAccess = async (e) => {
         console.log("Memulai transaksi untuk alamat:", patientAddr);
         const tx = await contract.requestAccess(patientAddr);
         
-        // WAJIB TUNGGU KONFIRMASI BLOCKCHAIN
         await tx.wait(); 
         
         alert("Permintaan akses berhasil dikirim!");
         
-        // --- TAMBAHKAN INI AGAR TABEL TERISI OTOMATIS ---
         await loadPatientStatus(); 
-        setPatientAddr(''); // Kosongkan input
-        // ----------------------------------------------
+        setPatientAddr(''); 
 
     } catch (error) { 
         console.error(error);
@@ -126,7 +115,6 @@ const handleRequestAccess = async (e) => {
             let currentCid = "";
 
             if (isEditMode) {
-                // JIKA MODE EDIT: Panggil API Update
                 const res = await fetch(`http://127.0.0.1:5000/medical/update`, {
                     method: "PUT",
                     headers: { "Content-Type": "application/json" },
@@ -139,7 +127,6 @@ const handleRequestAccess = async (e) => {
                 const result = await res.json();
                 currentCid = result.ipfs_cid;
             } else {
-                // JIKA DATA BARU: Ambil index dari blockchain
                 const records = await contract.getMedicalRecords(patientChecksum);
                 const nextIndex = records.length;
 

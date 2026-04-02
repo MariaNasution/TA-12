@@ -47,7 +47,6 @@ export default function HerbalDoctorDashboard() {
         ? `http://localhost:5000/herbal/update/${form.id}`
         : "http://localhost:5000/herbal/store";
 
-      // 1. Sinkronisasi ke Flask (Simpan ke IPFS & Indexing ke ChromaDB)
       const response = await fetch(url, {
         method: isUpdate ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -57,7 +56,6 @@ export default function HerbalDoctorDashboard() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Gagal ke server");
 
-      // 2. Tanda Tangan Wallet (Verifikasi ke Blockchain)
       if (!window.ethereum) throw new Error("MetaMask tidak ditemukan!");
 
       const provider = new ethers.providers.Web3Provider(window.ethereum);
@@ -72,7 +70,6 @@ export default function HerbalDoctorDashboard() {
         `Data AI & IPFS Berhasil. Silakan Konfirmasi di MetaMask untuk mencatat ${isUpdate ? "Perubahan" : "Data Baru"} ke Blockchain.`,
       );
 
-      // Kita kirim ipfs_cid hasil generate Flask ke Smart Contract
       const tx = await contract.storeHerbalData(result.ipfs_cid);
 
       console.log("Menunggu konfirmasi blockchain...");
@@ -82,7 +79,6 @@ export default function HerbalDoctorDashboard() {
         `✅ Berhasil! Data ${isUpdate ? "Diperbarui" : "Disimpan"} di AI & Blockchain.`,
       );
 
-      // Reset & Refresh
       setForm({
         id: null,
         name: "",
@@ -99,7 +95,6 @@ export default function HerbalDoctorDashboard() {
     }
   };
 
-  // --- FUNGSI HAPUS (DELETE) ---
   const handleDelete = async (id) => {
     if (
       !window.confirm(
@@ -108,9 +103,8 @@ export default function HerbalDoctorDashboard() {
     )
       return;
 
-    setIsSaving(true); // Gunakan loading state jika ada
+    setIsSaving(true); 
     try {
-      // 1. Hapus dari ChromaDB (Agar tidak muncul di RAG AI)
       const response = await fetch(
         `http://localhost:5000/herbal/delete/${id}`,
         {
@@ -122,7 +116,6 @@ export default function HerbalDoctorDashboard() {
       if (!response.ok)
         throw new Error(result.error || "Gagal hapus di server");
 
-      // 2. Tanda Tangan Wallet (Mencatat penghapusan di Ledger)
       if (!window.ethereum) throw new Error("MetaMask tidak ditemukan!");
 
       const provider = new ethers.providers.Web3Provider(window.ethereum);
@@ -137,7 +130,6 @@ export default function HerbalDoctorDashboard() {
         "Data di AI terhapus. Silakan Konfirmasi di MetaMask untuk memvalidasi penghapusan ini di Blockchain.",
       );
 
-      // Kita kirim status 'DELETED' agar ada jejak audit di Blockchain
       const tx = await contract.storeHerbalData(`DELETED_${id}`);
       await tx.wait();
 
@@ -153,7 +145,6 @@ export default function HerbalDoctorDashboard() {
     }
   };
 
-  // --- FUNGSI EDIT (Hanya untuk mengisi form) ---
   const handleEdit = (herb) => {
     setForm({
       id: herb.id,

@@ -8,7 +8,7 @@ const KelolaPengguna = () => {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedDoc, setSelectedDoc] = useState(null); // { address: string, name: string }
+  const [selectedDoc, setSelectedDoc] = useState(null); 
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -30,8 +30,6 @@ const KelolaPengguna = () => {
     if (!window.confirm(`Nonaktifkan dokter ${userName}?\n\nDokter ini tidak dapat login dan harus melakukan registrasi ulang untuk aktif kembali.`)) return;
 
     try {
-      // 1. Backend DULU — update verification_status = 'deactivated' di MySQL
-      // Ini yang paling penting: memblokir login dan mengijinkan re-registrasi
       const res = await fetch('http://127.0.0.1:5000/admin/deactivate-doctor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -44,8 +42,6 @@ const KelolaPengguna = () => {
         return;
       }
 
-      // 2. Blockchain — hapus status dokter dari smart contract (opsional)
-      // Jika MetaMask gagal, tidak masalah — MySQL sudah memblokir akses
       let blockchainInfo = '';
       try {
         const provider = new ethers.providers.Web3Provider(window.ethereum);
@@ -60,7 +56,7 @@ const KelolaPengguna = () => {
       }
 
       alert(`✅ Dokter ${userName} berhasil dinonaktifkan di Database${blockchainInfo}.`);
-      fetchUsers(); // Refresh daftar pengguna
+      fetchUsers(); 
     } catch (err) {
       console.error('❌ Error deactivate:', err);
       alert('Gagal memproses: ' + (err.data?.message || err.message));
@@ -88,21 +84,18 @@ const KelolaPengguna = () => {
     );
   });
 
-  // --- Helper: Warna Avatar berdasarkan Role ---
   const getAvatarColor = (role) => {
     if (role === 'Dokter Medis') return { bg: '#e8f5e9', color: '#2e7d32' };
     if (role === 'Dokter Herbal') return { bg: '#e8f5e9', color: '#388e3c' };
     return { bg: '#e3f2fd', color: '#1565c0' }; // Pasien
   };
 
-  // --- Helper: Label & Warna Role Badge ---
   const getRoleBadge = (role) => {
     if (role === 'Dokter Medis') return { label: 'Dokter Medis', bg: '#e8f0fe', color: '#1a73e8', border: '#c5d8f8' };
     if (role === 'Dokter Herbal') return { label: 'Dokter Herbal', bg: '#e8f5e9', color: '#2e7d32', border: '#c8e6c9' };
     return { label: 'Pasien', bg: '#e8f5e9', color: '#388e3c', border: '#c8e6c9' };
   };
 
-  // --- Helper: Label & Warna Status Badge ---
   const getStatusBadge = (status) => {
     if (status === 'active' || status === 'verified') return { label: 'Aktif', bg: '#e8f5e9', color: '#2e7d32', border: '#c8e6c9' };
     if (status === 'pending') return { label: 'Menunggu', bg: '#fffbeb', color: '#b45309', border: '#fde68a' };
@@ -110,7 +103,6 @@ const KelolaPengguna = () => {
     return { label: 'Nonaktif', bg: '#ffebee', color: '#c62828', border: '#ffcdd2' };
   };
 
-  // Helper: Inisial Nama
   const getInitials = (name) => {
     const parts = name.split(' ');
     if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();

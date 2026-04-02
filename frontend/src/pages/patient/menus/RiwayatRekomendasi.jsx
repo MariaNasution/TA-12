@@ -11,7 +11,6 @@ useEffect(() => {
         const res = await fetch(`http://localhost:5000/herbal/history?address=${address}`);
         const data = await res.json();
         
-        // PROTEKSI: Jika data bukan array (misal error object), set ke array kosong
         if (Array.isArray(data)) {
           setHistory(data);
         } else {
@@ -19,7 +18,7 @@ useEffect(() => {
         }
       } catch (err) {
         console.error("Gagal ambil riwayat:", err);
-        setHistory([]); // Set kosong jika fetch gagal total
+        setHistory([]); 
       } finally {
         setLoading(false);
       }
@@ -46,7 +45,7 @@ useEffect(() => {
         {history.map((item, idx) => (
           <div key={idx} className="history-card">
             <div className="card-header">
-              {/* SESUAIKAN: dari item.timestamp ke item.tanggal (nama kolom SQL) */}
+              {/* SESUAIKAN: dari item.timestamp ke item.tanggal */}
               <span className="date-tag">
                 {new Date(item.tanggal).toLocaleDateString('id-ID', { 
                   day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' 
@@ -58,7 +57,7 @@ useEffect(() => {
             
             <div className="info-row">
               <MessageCircle size={16} className="icon-muted" />
-              {/* SESUAIKAN: item.keluhan (nama kolom SQL) */}
+              {/* SESUAIKAN: item.keluhan  */}
               <p className="complaint">Keluhan: <strong>"{item.keluhan}"</strong></p>
             </div>
 

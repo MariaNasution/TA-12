@@ -11,7 +11,7 @@ const RequestAccess = ({
 }) => {
   return (
     <div className="request-wrapper">
-      {/* 1. HEADER SECTION (Sesuai Gaya Beranda) */}
+      {/* 1. HEADER SECTION */}
       <div className="header-content">
         <div>
           <h2 className="title">Request Akses</h2>
@@ -21,7 +21,7 @@ const RequestAccess = ({
         <div className="header-action-placeholder"></div>
       </div>
 
-      {/* 2. ALERT INFO (Warna Biru Cerah) */}
+      {/* 2. ALERT INFO */}
       <div className="alert-info">
         <div className="alert-icon"><Info size={20} /></div>
         <div className="alert-text">
@@ -63,7 +63,7 @@ const RequestAccess = ({
           </form>
         </div>
 
-        {/* TABEL RIWAYAT (Background Putih Bersih) */}
+        {/* TABEL RIWAYAT */}
        <div className="history-card">
         <div className="card-header-simple">
           <h3>Riwayat Request Terbaru</h3>
@@ -78,7 +78,7 @@ const RequestAccess = ({
               </tr>
             </thead>
             <tbody>
-              {/* 1. TAMPILKAN YANG SUDAH DISETUJUI (Approved) */}
+              {/* 1. TAMPILKAN YANG SUDAH DISETUJUI */}
   {approvedDocs.length > 0 && approvedDocs.map((req, idx) => (
     <tr key={`app-${idx}`}>
       <td className="info-cell">
@@ -92,7 +92,7 @@ const RequestAccess = ({
     </tr>
   ))}
 
-  {/* 2. TAMPILKAN YANG MASIH MENUNGGU (Pending) */}
+  {/* 2. TAMPILKAN YANG MASIH MENUNGGU */}
   {pendingRequests.length > 0 && pendingRequests.map((req, idx) => (
     <tr key={`pen-${idx}`}>
       <td className="info-cell">

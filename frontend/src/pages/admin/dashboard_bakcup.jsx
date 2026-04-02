@@ -14,14 +14,12 @@ export default function AdminDashboard() {
     const loadPendingDoctors = async () => {
         try {
             const provider = new ethers.providers.Web3Provider(window.ethereum);
-            // Ambil SEMUA akun yang terhubung ke provider (Ganache)
             const allAccounts = await provider.listAccounts(); 
             const contract = new ethers.Contract(CONTRACT_ADDRESS, HEALTH_RECORD_ABI, provider);
 
             const pending = [];
             for (let addr of allAccounts) {
                 const info = await contract.doctors(addr);
-                // info[3] = isRegistered, info[2] = isApproved
                 if (info.isRegistered && !info.isApproved) {
                     pending.push({
                         address: addr,
@@ -47,7 +45,7 @@ export default function AdminDashboard() {
             const tx = await contract.approveDoctor(addr);
             await tx.wait();
             alert("✅ Dokter Berhasil Disetujui!");
-            loadPendingDoctors(); // Refresh daftar
+            loadPendingDoctors();
         } catch (error) {
             alert("Gagal: " + error.message);
         }

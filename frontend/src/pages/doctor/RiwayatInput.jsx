@@ -1,7 +1,6 @@
 import React from 'react';
 
 const RiwayatInput = ({ patientsHistory, onEdit, onDelete, txLoading }) => {
-// Melakukan flattening data: menggabungkan semua rekam medis dari semua pasien menjadi satu list
   const allRecords = patientsHistory.flatMap(p => 
     (p.medicalRecords || [])
       .map((rec, i) => ({ 
@@ -9,10 +8,9 @@ const RiwayatInput = ({ patientsHistory, onEdit, onDelete, txLoading }) => {
         patientName: p.name || "Pasien", 
         patientAddress: p.address,
         blockchainIndex: (rec.index !== undefined && rec.index !== null) ? rec.index : i,
-        // Konversi timestamp string ISO atau Unix
         dateObj: typeof rec.timestamp === 'string' ? new Date(rec.timestamp) : new Date(rec.timestamp * 1000)
       }))
-  ).sort((a, b) => b.dateObj - a.dateObj); // Urutkan terbaru di atas
+  ).sort((a, b) => b.dateObj - a.dateObj); 
 
   return (
     <div className="menu-wrapper">

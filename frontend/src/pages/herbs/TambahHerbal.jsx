@@ -1,7 +1,6 @@
 import React from 'react';
 import { Leaf, Info, Save, X } from 'lucide-react';
 
-// Terima props dari Dashboard Utama
 const TambahHerbal = ({ form, setForm, onSave, isSaving, onCancel }) => {
   
   return (
@@ -30,7 +29,6 @@ const TambahHerbal = ({ form, setForm, onSave, isSaving, onCancel }) => {
             <input 
               type="text" 
               placeholder="Contoh: Sambiloto, Temulawak, dsb..."
-              // KUNCI: Value mengambil dari props form
               value={form.name || ""}
               onChange={(e) => setForm({...form, name: e.target.value})}
               required 

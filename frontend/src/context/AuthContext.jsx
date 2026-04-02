@@ -4,7 +4,6 @@ import { useRouter } from 'next/router';
 
 const AuthContext = createContext();
 
-// Helper: Baca session dari localStorage saat pertama kali mount
 const getStoredSession = () => {
     if (typeof window === 'undefined') return null;
     try {
@@ -18,7 +17,6 @@ export const AuthProvider = ({ children }) => {
     const { address, isConnected } = useWeb3ModalAccount();
     const { open } = useWeb3Modal();
     
-    // Inisialisasi state dari localStorage jika ada
     const storedSession = getStoredSession();
     const [user, setUser] = useState(
         storedSession 
@@ -26,29 +24,23 @@ export const AuthProvider = ({ children }) => {
             : { address: null, role: null, userName: null, status: null }
     );
     const [loading, setLoading] = useState(false);
-    // isAuthenticated starts true if there's a stored session, then validated once wallet connects
     const [isAuthenticated, setIsAuthenticated] = useState(!!storedSession);
     const router = useRouter();
     const prevAddressRef = useRef(storedSession?.address || null);
 
-    // Validasi session: hanya authenticated jika wallet terhubung DAN address cocok dengan session
     useEffect(() => {
         const stored = getStoredSession();
         if (isConnected && address && stored && stored.address?.toLowerCase() === address?.toLowerCase()) {
-            // Wallet terhubung dan cocok dengan session → authenticated
             setIsAuthenticated(true);
         } else if (!isConnected || !address) {
-            // Wallet belum terhubung → tidak authenticated
             setIsAuthenticated(false);
         } else if (stored && stored.address?.toLowerCase() !== address?.toLowerCase()) {
-            // Wallet terhubung tapi address berbeda dari session → reset
             setIsAuthenticated(false);
             localStorage.removeItem('herbalchain_session');
             setUser({ address: address, role: null, userName: null, status: null });
         }
     }, [isConnected, address]);
 
-    // Simpan session ke localStorage setiap kali user state berubah
     useEffect(() => {
         if (user.role && user.address) {
             localStorage.setItem('herbalchain_session', JSON.stringify({
@@ -68,7 +60,6 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    // Fungsi untuk set session langsung (digunakan setelah registrasi dokter)
     const setSession = (sessionData) => {
         setUser({
             address: sessionData.address,
@@ -79,18 +70,14 @@ export const AuthProvider = ({ children }) => {
         setIsAuthenticated(true);
     };
 
-    // Fungsi untuk re-check status setelah dokter diverifikasi (BUG-01 fix)
-    // Dipanggil dari pending-verification.jsx saat polling menemukan status 'verified'
     const checkStatus = async () => {
         const stored = getStoredSession();
         if (!stored?.address) return;
         try {
-            // 1. Cek status verifikasi di database (tidak butuh password)
             const statusRes = await fetch(`http://127.0.0.1:5000/auth/status/${stored.address}`);
             const statusData = await statusRes.json();
 
             if (statusData.verification_status === 'verified') {
-                // 2. Jika sudah verified, ambil role dari blockchain (tidak butuh password)
                 const roleRes = await fetch(`http://127.0.0.1:5000/auth/check-role/${stored.address}`);
                 const roleData = await roleRes.json();
 
@@ -103,7 +90,6 @@ export const AuthProvider = ({ children }) => {
                 setUser(newUser);
                 setIsAuthenticated(true);
                 localStorage.setItem('herbalchain_session', JSON.stringify(newUser));
-                // Redirect ke dashboard yang sesuai
                 if (newUser.role === 'herbal_doctor') router.push('/herbs/dashboard');
                 else router.push('/doctor/dashboard');
             }
@@ -112,7 +98,6 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    // Login penuh (Wallet + Password) — dipanggil dari halaman /login
     const loginWithPassword = async (walletAddress, password) => {
         try {
             const response = await fetch('http://127.0.0.1:5000/auth/login', {
@@ -128,7 +113,6 @@ export const AuthProvider = ({ children }) => {
                 setUser({ address: walletAddress, role: userRole, userName: data.name, status: data.status });
                 setIsAuthenticated(true);
 
-                // Navigasi berdasarkan role
                 if (data.status === 'pending_approval') {
                     router.push('/pending-verification');
                     return { success: true, data };
@@ -153,23 +137,19 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    // Deteksi pergantian akun MetaMask → reset auth dan redirect ke /register
     useEffect(() => {
         if (isConnected && address) {
             if (prevAddressRef.current && prevAddressRef.current.toLowerCase() !== address.toLowerCase()) {
-                // Akun MetaMask berubah → reset state dan redirect ke register
                 console.log('🔄 MetaMask account changed, redirecting to /login');
                 setUser({ address: address, role: null, userName: null, status: null });
                 setIsAuthenticated(false);
                 localStorage.removeItem('herbalchain_session');
                 router.push('/login');
             } else {
-                // Set address awal (jangan timpa role/userName yang sudah di-restore)
                 setUser(prev => ({ ...prev, address: address }));
             }
             prevAddressRef.current = address;
         } else if (!isConnected) {
-            // Wallet disconnected
             const stored = getStoredSession();
             if (!stored) {
                 setUser({ address: null, role: null, userName: null, status: null });
@@ -179,7 +159,6 @@ export const AuthProvider = ({ children }) => {
         }
     }, [isConnected, address]);
 
-    // Saat wallet terhubung dan di halaman utama, arahkan ke register (jika belum authenticated)
     useEffect(() => {
         if (isConnected && address && !isAuthenticated) {
             const currentPath = router.pathname;

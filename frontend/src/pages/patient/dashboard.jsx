@@ -27,7 +27,6 @@ export default function PatientDashboard() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [notifs, setNotifs] = useState([]); 
 
-  // AUTH GUARD: Pastikan user authenticated dan role benar
   useEffect(() => {
     if (loading) return;
     if (!isAuthenticated) {
@@ -41,7 +40,6 @@ export default function PatientDashboard() {
   }, [loading, isAuthenticated, role, status, router]);
 
  const loadRekomendasiCount = async () => {
-    // TAMBAHKAN VALIDASI INI
     if (!address || address === "null") {
         console.log("wallet belum terdeteksi...");
         return; 
@@ -50,7 +48,6 @@ export default function PatientDashboard() {
     try {
         const res = await fetch(`http://localhost:5000/herbal/history-count?address=${address}`);
         
-        // Cek apakah response-nya oke (bukan 404)
         if (!res.ok) {
             console.error("Server Flask bermasalah atau endpoint tidak ditemukan");
             return;
@@ -70,11 +67,8 @@ export default function PatientDashboard() {
       const contract = new ethers.Contract(CONTRACT_ADDRESS, HEALTH_RECORD_ABI, provider.getSigner());
       const patientChecksum = ethers.utils.getAddress(address.toLowerCase());
 
-      // 1. Ambil Rekam Medis dari Blockchain
       const records = await contract.getMedicalRecords(patientChecksum);
       
-      // 2. Fetch Konten/Diagnosis dari Flask (Logic asli Maria)
-      // Di dalam PatientDashboard.jsx -> fungsi loadRequests
 const formattedRecords = await Promise.all(records.map(async (r, index) => {
     const isActuallyActive = r.isActive !== undefined ? r.isActive : r[3];
 
@@ -109,7 +103,7 @@ const formattedRecords = await Promise.all(records.map(async (r, index) => {
 
      const finalData = formattedRecords
     .filter(r => 
-        r !== null && // Buang data yang gagal fetch
+        r !== null && 
         (r.isActive === true || r.isActive === 1) 
     )
     .sort((a, b) => b.timestamp - a.timestamp);
@@ -119,7 +113,6 @@ console.log("📋 [DEBUG PASIEN] ISI DATA YANG AKAN TAMPIL:", finalData);
 
 setMedicalRecords(finalData);
 
-      // 3. Ambil Status Dokter
       const resDocs = await fetch("http://127.0.0.1:5000/auth/doctors");
       const dataDocs = await resDocs.json();
       const allDoctors = dataDocs.doctors || [];
@@ -127,19 +120,14 @@ setMedicalRecords(finalData);
       let pending = [];
       let approved = [];
 
-      // Gunakan docObj agar jelas bahwa ini adalah sebuah Object {address, name}
       for (let docObj of allDoctors) { 
         try {
-          // 1. Ambil address-nya saja untuk keperluan Ethers/Web3
           const rawAddr = typeof docObj === 'object' ? docObj.address : docObj;
           const docChecksum = ethers.utils.getAddress(rawAddr);
           
-          // 2. Cek status di Blockchain
           const isAuth = await contract.checkAccess(patientChecksum, docChecksum);
           const isPending = await contract.pendingRequests(patientChecksum, docChecksum);
           
-          // 3. Ambil nama dari Object atau Blockchain
-          // Kita prioritaskan nama dari docObj (Flask) karena lebih cepat
           const docName = docObj.name || "Dokter";
 
           if (isAuth) {
@@ -185,14 +173,12 @@ setMedicalRecords(finalData);
     const handleOpenNotifications = async () => {
     setActiveTab('notifikasi');
     
-    // Panggil Flask untuk tandai sudah dibaca di database
     try {
       await fetch('http://localhost:5000/notifications/mark-read', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ address: address })
       });
-      // Refresh data agar angka di sidebar jadi 0
       loadNotifications();
     } catch (err) {
       console.error(err);
@@ -204,10 +190,8 @@ setMedicalRecords(finalData);
     setIsRecommending(true);
 
     try {
-        // Gabungkan semua diagnosis medis untuk jadi konteks AI
         const kondisiMedis = medicalRecords.map(r => r.diagnosis).join(', ');
 
-        // Panggil Server Flask dengan parameter lengkap termasuk Wallet Address
         const response = await fetch(
             `http://localhost:5000/herbal/recommendation-input?q=${keluhan}&medical=${kondisiMedis}&use_rag=${useRag}&address=${address}`
         );
@@ -215,7 +199,6 @@ setMedicalRecords(finalData);
         
         setRekomendasi(data);
         
-        // Setelah AI menjawab, refresh angka statistik di Beranda
         loadRekomendasiCount(); 
         
     } catch (error) {
@@ -237,12 +220,12 @@ setMedicalRecords(finalData);
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                address: docAddr.toLowerCase(), // Kirim ke wallet DOKTER
+                address: docAddr.toLowerCase(), 
                 pesan: `✅ Akses Disetujui: Pasien ${address.substring(0, 6)}... telah memberikan Anda izin akses.`
             })
         });
       alert("Akses berhasil diberikan!");
-      loadRequests(); // Refresh data biar angka di Beranda berubah
+      loadRequests(); 
     } catch (error) { console.error(error); }
     finally { setIsProcessing(false); }
   };
@@ -258,7 +241,7 @@ setMedicalRecords(finalData);
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                address: docAddr.toLowerCase(), // Target DOKTER
+                address: docAddr.toLowerCase(), 
                 pesan: `❌ Akses Ditolak: Permintaan Anda ke pasien ${address.substring(0, 6)}... ditolak.`
             })
         });

@@ -6,7 +6,6 @@ const RiwayatMedis = ({ medicalRecords = [] }) => {
   const { address } = useAuth();
   const [doctorNames, setDoctorNames] = useState({});
 
-  // Fetch nama dokter untuk mapping address -> Name
   useEffect(() => {
     const fetchDoctors = async () => {
       try {
@@ -53,10 +52,6 @@ const RiwayatMedis = ({ medicalRecords = [] }) => {
               <tbody>
                 {medicalRecords
                   .filter((rec) => {
-                    // --- 🛡️ LOGIKA FILTER PENYELAMAT ---
-                    // 1. Jika isActive bernilai false (setelah di-nonaktifkan dokter), sembunyikan.
-                    // 2. Jika isActive bernilai undefined, kita anggap true (aktif) agar data lama tidak hilang.
-                    // 3. Kita juga cek kemungkinan angka 0/1 dari blockchain.
                     
                     const isNonAktif = rec.isActive === false || rec.isActive === 0 || rec.isActive === "false";
                     return !isNonAktif;

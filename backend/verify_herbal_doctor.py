@@ -2,15 +2,12 @@ import os
 from dotenv import load_dotenv
 from blockchain.contract import web3, contract
 
-# Memuat variabel dari file .env
 load_dotenv()
 
-# Mengambil data dari environment variables
 ADMIN_PK = os.getenv("ADMIN_PRIVATE_KEY")
 DOCTOR_HERBAL = os.getenv("HERBAL_DOCTOR_ADDRESS")
 
 def verify():
-    # Validasi awal agar tidak error jika .env kosong
     if not ADMIN_PK or not DOCTOR_HERBAL:
         print("❌ Error: ADMIN_PRIVATE_KEY atau HERBAL_DOCTOR_ADDRESS tidak ditemukan di .env")
         return

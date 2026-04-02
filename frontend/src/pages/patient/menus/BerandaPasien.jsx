@@ -5,7 +5,7 @@ const BerandaPasien = ({
   medicalRecords = [], 
   pendingDocs = [], 
   approvedDocs = [], 
-  rekomendasiCount = 0, // Tambahkan ini
+  rekomendasiCount = 0,
   changeTab,
 }) => {
   

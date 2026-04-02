@@ -4,7 +4,6 @@ const NotifikasiPasien = ({ address }) => {
   const [notifs, setNotifs] = useState([]);
 
   useEffect(() => {
-    // Panggil fetch ke endpoint /notifications?address=...
     const fetchNotifs = async () => {
       try {
         const res = await fetch(`http://127.0.0.1:5000/notifications?address=${address}`);

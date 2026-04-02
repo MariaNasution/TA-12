@@ -21,7 +21,6 @@ const NotifikasiDokter = ({ address }) => {
           console.warn("⚠️ [DEBUG] Data kosong. Cek apakah di database MySQL ada notif untuk address ini.");
         }
 
-        // Urutkan terbaru di atas
         const sortedData = data.sort((a, b) => b.id - a.id);
         setNotifs(sortedData);
       } catch (e) { 
@@ -36,21 +35,18 @@ const NotifikasiDokter = ({ address }) => {
     }
   }, [address]);
 
-  // Fungsi pembantu warna
   const getStatusColor = (pesan) => {
     const p = pesan.toLowerCase();
     
-    // Dari Admin
     if (p.includes('berhasil diverifikasi') || p.includes('selamat bekerja')) return '#2e7d32'; // Hijau tua Admin
     if (p.includes('dinonaktifkan') || p.includes('registrasi ulang')) return '#c62828'; // Merah tua Admin
     if (p.includes('ditolak') && p.includes('verifikasi')) return '#e65100'; // Orange Admin
     
-    // Dari Pasien
     if (p.includes('disetujui') || p.includes('approve')) return '#4caf50'; // Hijau Pasien
     if (p.includes('ditolak') || p.includes('reject')) return '#f44336'; // Merah Pasien
     if (p.includes('dicabut') || p.includes('cabut') || p.includes('revoke')) return '#ff9800'; // Kuning Pasien
     
-    return '#2196f3'; // Biru Default (Info)
+    return '#2196f3'; 
   };
 
   return (

@@ -23,12 +23,10 @@
       const [isEditMode, setIsEditMode] = useState(false);
       const [selectedRecordIndex, setSelectedRecordIndex] = useState(null);
       
-      // State Data Real
-      const [patientsHistory, setPatientsHistory] = useState([]); // Riwayat dari Flask
-      const [approvedDocs, setApprovedDocs] = useState([]); // Pasien Aktif
-      const [pendingDocs, setPendingDocs] = useState([]); // Request Menunggu
+      const [patientsHistory, setPatientsHistory] = useState([]);
+      const [approvedDocs, setApprovedDocs] = useState([]); 
+      const [pendingDocs, setPendingDocs] = useState([]); 
 
-      // AUTH GUARD: Pastikan user authenticated, role benar, dan bukan pending
       useEffect(() => {
         if (loading) return;
         if (!isAuthenticated) {
@@ -58,9 +56,9 @@
       const prepareEdit = (record) => {
           setPatientAddr(record.patientAddress);
           setMedicalData(record.diagnosis);
-          setSelectedRecordIndex(record.blockchainIndex || 0); // Use the correct mapped index
+          setSelectedRecordIndex(record.blockchainIndex || 0); 
           setIsEditMode(true);
-          setActiveTab('input'); // Pindah ke tab input otomatis
+          setActiveTab('input'); 
           window.scrollTo({ top: 0, behavior: 'smooth' });
       };
 
@@ -93,7 +91,6 @@
             if (resAI.ok) {
                 alert("Berhasil! Data dinonaktifkan di Blockchain & AI.");
             } else {
-                // Jika 404, tetap beri tahu sukses di blockchain tapi AI gagal
                 alert(`Blockchain Sukses, tapi AI: ${resultAI.error || 'Data tidak ditemukan'}`);
             }
 
@@ -179,8 +176,8 @@ const handleSaveMedicalData = async (e) => {
               setMedicalData('');
               setPatientAddr('');
               setIsEditMode(false);
-              fetchMedicalHistory(); // Refresh data
-              setActiveTab('dashboard'); // Pindah ke dashboard setelah selesai
+              fetchMedicalHistory(); 
+              setActiveTab('dashboard'); 
           } catch (error) {
               alert("Gagal menyimpan: " + error.message);
           } finally {
@@ -208,7 +205,7 @@ const handleSaveMedicalData = async (e) => {
         }
     };
       const handleRequestAccess = async (e) => {
-          if (e) e.preventDefault(); // Mencegah reload halaman
+          if (e) e.preventDefault(); 
           
           if (!ethers.utils.isAddress(patientAddr)) {
               return alert("Alamat wallet pasien tidak valid!");
@@ -220,31 +217,27 @@ const handleSaveMedicalData = async (e) => {
               const signer = provider.getSigner();
               const contract = new ethers.Contract(CONTRACT_ADDRESS, HEALTH_RECORD_ABI, signer);
 
-              // Manggil fungsi requestAccess di Smart Contract
               const tx = await contract.requestAccess(patientAddr);
               
               console.log("Transaksi dikirim:", tx.hash);
-              await tx.wait(); // Tunggu sampai transaksi sukses di Blockchain
+              await tx.wait(); 
 
-              // Kirim Notifikasi ke Pasien bahwa ada permintaan akses baru
               await fetch("http://127.0.0.1:5000/notifications/add", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
-                      address: patientAddr.toLowerCase(), // Target: PASIEN
+                      address: patientAddr.toLowerCase(),
                       pesan: `📩 Permintaan Akses Baru: dr. ${userName || address.substring(0, 6) + '...'} meminta izin mengakses rekam medis Anda.`
                   })
               });
 
               alert("Permintaan akses berhasil dikirim ke Pasien!");
-              setPatientAddr(''); // Kosongkan input setelah sukses
+              setPatientAddr(''); 
               
-              // Refresh data agar muncul di tabel riwayat request bawah
               loadPatientStatus(); 
               
           } catch (error) {
               console.error("Gagal request akses:", error);
-              // Error handling agar pesan lebih jelas
               const errorMessage = error.data?.message || error.message;
               alert("Gagal mengirim permintaan: " + errorMessage);
           } finally {
