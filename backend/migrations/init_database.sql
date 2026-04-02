@@ -40,8 +40,16 @@ CREATE TABLE IF NOT EXISTS user_auth (
     name VARCHAR(100) NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     document_cid VARCHAR(100) DEFAULT NULL,
-    verification_status ENUM('pending', 'verified', 'rejected') DEFAULT 'pending',
+    verification_status ENUM('pending', 'verified', 'rejected', 'deactivated') DEFAULT 'pending',
     rejection_reason TEXT DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_login TIMESTAMP NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ============================================
+-- MIGRATION: Jika tabel sudah ada, jalankan query ini secara manual
+-- di MySQL/SQLyog untuk menambahkan nilai 'deactivated' ke ENUM
+-- ============================================
+-- ALTER TABLE user_auth
+-- MODIFY COLUMN verification_status
+-- ENUM('pending', 'verified', 'rejected', 'deactivated') DEFAULT 'pending';

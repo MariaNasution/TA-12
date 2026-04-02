@@ -177,7 +177,7 @@ def login_api():
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT password_hash FROM user_auth WHERE LOWER(wallet_address) = LOWER(%s)", (address,))
+        cursor.execute("SELECT password_hash, verification_status FROM user_auth WHERE LOWER(wallet_address) = LOWER(%s)", (address,))
         user_record = cursor.fetchone()
 
         if not user_record:
@@ -194,6 +194,19 @@ def login_api():
             conn.close()
             return jsonify({"error": "Password salah"}), 401
 
+        # --- 1b. CEK STATUS DEAKTIVASI (SEBELUM cek blockchain) ---
+        # Ini memastikan dokter yang dinonaktifkan tidak bisa login
+        # bahkan jika blockchain record-nya belum terhapus (edge case: MetaMask gagal)
+        if user_record.get('verification_status') == 'deactivated':
+            cursor.close()
+            conn.close()
+            return jsonify({
+                "role": "none",
+                "status": "deactivated",
+                "error": "Akun Anda telah dinonaktifkan Admin.",
+                "message": "Silakan masuk ke halaman Registrasi untuk mendaftar ulang (mengulang dari awal)."
+            }), 403
+
         # Update last login
         cursor.execute("UPDATE user_auth SET last_login = %s WHERE wallet_address = %s", (datetime.now(), address))
         conn.commit()
@@ -202,6 +215,7 @@ def login_api():
     except Exception as e:
         print(f"❌ Database Error: {e}")
         return jsonify({"error": "Gagal verifikasi basis data"}), 500
+
 
     # --- 2. CEK ROLE DI BLOCKCHAIN (Sama seperti alur lama) ---
     # B. CEK DOKTER (Medis & Herbal)
@@ -245,6 +259,13 @@ def login_api():
         cur2.close()
         conn2.close()
         if db_check:
+            if db_check['verification_status'] == 'deactivated':
+                return jsonify({
+                    "role": "none",
+                    "status": "deactivated",
+                    "error": "Akun Anda telah dinonaktifkan Admin.",
+                    "message": "Silakan masuk ke halaman Registrasi untuk mendaftar ulang (mengulang dari awal)."
+                }), 403
             return jsonify({
                 "role": "none",
                 "status": "incomplete",
@@ -338,10 +359,9 @@ def admin_reject_doctor():
 
 @app.route("/admin/deactivate-doctor", methods=["POST"])
 def admin_deactivate_doctor():
-    """Nonaktifkan dokter yang sudah diapprove.
-    Reset verification_status ke 'pending' di DB dan hapus approvedDoctor di blockchain (via rejectDoctor).
-    Front-end memanggil contract.rejectDoctor() secara langsung melalui MetaMask,
-    endpoint ini hanya update status di DB dan kirim notifikasi.
+    """Nonaktifkan dokter secara total.
+    Menghapus data autentikasi dari DB user_auth agar dokter harus registrasi ulang dari awal.
+    Di Blockchain, admin sudah menghapusnya dari daftar `doctors` mapping via rejectDoctor.
     """
     try:
         data = request.json
@@ -351,16 +371,20 @@ def admin_deactivate_doctor():
 
         conn = get_db_connection()
         cursor = conn.cursor()
+        
+        # Hapus data autentikasi secara permanen (Soft Delete)
         cursor.execute(
-            "UPDATE user_auth SET verification_status = 'pending', rejection_reason = NULL WHERE LOWER(wallet_address) = LOWER(%s)",
+            "UPDATE user_auth SET verification_status = 'deactivated' WHERE LOWER(wallet_address) = LOWER(%s)",
             (doctor_addr,)
         )
         conn.commit()
         cursor.close()
         conn.close()
 
-        add_notification(doctor_addr, "Akun Anda telah dinonaktifkan oleh Admin. Silakan hubungi administrator.")
-        return jsonify({"status": "success", "message": "Dokter berhasil dinonaktifkan"})
+        # Catat notifikasi 
+        add_notification(doctor_addr, "Akun Dokter Anda telah dinonaktifkan oleh Admin. Silakan lakukan registrasi ulang untuk mengaktifkannya kembali.")
+        
+        return jsonify({"status": "success", "message": "Dokter berhasil dinonaktifkan secara total"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -431,11 +455,18 @@ def register_api():
         cursor = conn.cursor(dictionary=True)
 
         # Cek duplikasi di DB
-        cursor.execute("SELECT wallet_address FROM user_auth WHERE wallet_address = %s", (address,))
-        if cursor.fetchone():
-            cursor.close()
-            conn.close()
-            return jsonify({"error": "Wallet sudah terdaftar di basis data"}), 409
+        cursor.execute("SELECT * FROM user_auth WHERE LOWER(wallet_address) = LOWER(%s)", (address,))
+        existing_user = cursor.fetchone()
+        
+        is_re_registration = False
+        if existing_user:
+            if existing_user.get('verification_status') in ('deactivated', 'rejected'):
+                is_re_registration = True
+                print(f"DEBUG: Dokter {address} melakukan registrasi ulang setelah dinonaktifkan/ditolak")
+            else:
+                cursor.close()
+                conn.close()
+                return jsonify({"error": "Wallet sudah terdaftar di basis data"}), 409
 
         # Handle Document Upload for Doctors
         doc_cid = None
@@ -449,10 +480,19 @@ def register_api():
                 doc_cid = upload_json_to_ipfs(encrypted_doc)
                 print(f"🔐 Doctor document encrypted & uploaded: {doc_cid}")
 
-        cursor.execute(
-            "INSERT INTO user_auth (wallet_address, name, password_hash, document_cid, verification_status) VALUES (%s, %s, %s, %s, %s)", 
-            (address, name, hashed_pw, doc_cid, 'pending' if role == 'doctor' else 'verified')
-        )
+        new_status = 'pending' if role == 'doctor' else 'verified'
+        
+        if is_re_registration:
+            cursor.execute(
+                "UPDATE user_auth SET name = %s, password_hash = %s, document_cid = %s, verification_status = %s WHERE LOWER(wallet_address) = LOWER(%s)",
+                (name, hashed_pw, doc_cid, new_status, address)
+            )
+        else:
+            cursor.execute(
+                "INSERT INTO user_auth (wallet_address, name, password_hash, document_cid, verification_status) VALUES (%s, %s, %s, %s, %s)", 
+                (address, name, hashed_pw, doc_cid, new_status)
+            )
+            
         conn.commit()
         cursor.close()
         conn.close()
@@ -593,24 +633,31 @@ def get_all_users_admin():
             # Cek apakah dia Dokter
             doc = contract.functions.doctors(checksum_acc).call()
             # doc structure: [name, specialty, isApproved, isRegistered]
-            if doc[3]:  # isRegistered
+            
+            # Ambil detail dari database
+            db_conn = get_db_connection()
+            db_cursor = db_conn.cursor(dictionary=True)
+            db_cursor.execute("SELECT * FROM user_auth WHERE LOWER(wallet_address) = LOWER(%s)", (checksum_acc,))
+            db_user = db_cursor.fetchone()
+            db_cursor.close()
+            db_conn.close()
+
+            if doc[3]:  # isRegistered (Belum di-hapus dari blockchain)
                 role_label = "Dokter Herbal" if "herbal" in doc[1].lower() else "Dokter Medis"
                 
-                # FIX: Ambil status dari database untuk akurasi alasan penolakan
-                db_conn = get_db_connection()
-                db_cursor = db_conn.cursor(dictionary=True)
-                db_cursor.execute("SELECT verification_status, rejection_reason, document_cid FROM user_auth WHERE LOWER(wallet_address) = LOWER(%s)", (checksum_acc,))
-                db_user = db_cursor.fetchone()
-                db_cursor.close()
-                db_conn.close()
-
                 status = "pending"
                 rejection_reason = None
                 doc_cid = None
                 if db_user:
-                    status = db_user['verification_status']
-                    rejection_reason = db_user['rejection_reason']
-                    doc_cid = db_user['document_cid']
+                    status = db_user.get('verification_status', 'pending')
+                    rejection_reason = db_user.get('rejection_reason')
+                    doc_cid = db_user.get('document_cid')
+                    
+                    # BLOCKCHAIN SOURCE OF TRUTH: 
+                    # Jika db nyangkut di pending, tapi blockchain bilang isApproved = true, kita timpa statusnya.
+                    if status == 'pending' and doc[2]:
+                        status = 'verified'
+                        
                 elif doc[2]: # fallback ke blockchain jika tidak ada di DB (misal data legacy)
                     status = "active"
 
@@ -622,6 +669,18 @@ def get_all_users_admin():
                     "rejection_reason": rejection_reason,
                     "document_cid": doc_cid
                 })
+            else:
+                # TIDAK TERDAFTAR di Blockchain (Misal: Karena sudah di-deactivate / reject)
+                # TAPI kita harus menampilkan riwayatnya ke Admin
+                if db_user and db_user.get('verification_status') == 'deactivated':
+                    users.append({
+                        "name": db_user.get('name', 'Tanpa Nama'),
+                        "address": checksum_acc,
+                        "role": "Dokter (Nonaktif)", 
+                        "status": "deactivated",
+                        "rejection_reason": db_user.get('rejection_reason'),
+                        "document_cid": db_user.get('document_cid')
+                    })
 
         return jsonify({"status": "success", "users": users, "total": len(users)}), 200
 

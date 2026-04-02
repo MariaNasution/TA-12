@@ -27,33 +27,46 @@ const KelolaPengguna = () => {
   };
 
   const handleDeactivate = async (userAddress, userName) => {
-    if (!window.confirm(`Nonaktifkan dokter ${userName}? Dokter ini harus verifikasi ulang.`)) return;
-    try {
-      // 1. Transaksi blockchain — hapus status dokter di smart contract
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      const signer = provider.getSigner();
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, HEALTH_RECORD_ABI, signer);
-      const tx = await contract.rejectDoctor(userAddress);
-      await tx.wait();
+    if (!window.confirm(`Nonaktifkan dokter ${userName}?\n\nDokter ini tidak dapat login dan harus melakukan registrasi ulang untuk aktif kembali.`)) return;
 
-      // 2. Backend — reset verification_status ke 'pending' dan kirim notifikasi
+    try {
+      // 1. Backend DULU — update verification_status = 'deactivated' di MySQL
+      // Ini yang paling penting: memblokir login dan mengijinkan re-registrasi
       const res = await fetch('http://127.0.0.1:5000/admin/deactivate-doctor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ address: userAddress })
       });
       const data = await res.json();
-      if (res.ok) {
-        alert(`✅ Dokter ${userName} berhasil dinonaktifkan.`);
-        fetchUsers(); // Refresh list
-      } else {
-        alert('❌ Gagal menonaktifkan: ' + data.error);
+
+      if (!res.ok) {
+        alert('❌ Gagal menonaktifkan: ' + (data.error || 'Server error'));
+        return;
       }
+
+      // 2. Blockchain — hapus status dokter dari smart contract (opsional)
+      // Jika MetaMask gagal, tidak masalah — MySQL sudah memblokir akses
+      let blockchainInfo = '';
+      try {
+        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        const signer = provider.getSigner();
+        const contract = new ethers.Contract(CONTRACT_ADDRESS, HEALTH_RECORD_ABI, signer);
+        const tx = await contract.rejectDoctor(userAddress);
+        await tx.wait();
+        blockchainInfo = ' dan Blockchain';
+      } catch (bcErr) {
+        console.warn('⚠️ Blockchain tidak diperbarui (tidak kritis, database sudah diupdate):', bcErr.message);
+        blockchainInfo = ' (Database berhasil, Blockchain akan diperbarui otomatis saat registrasi ulang)';
+      }
+
+      alert(`✅ Dokter ${userName} berhasil dinonaktifkan di Database${blockchainInfo}.`);
+      fetchUsers(); // Refresh daftar pengguna
     } catch (err) {
       console.error('❌ Error deactivate:', err);
       alert('Gagal memproses: ' + (err.data?.message || err.message));
     }
   };
+
 
 
   useEffect(() => {
@@ -204,12 +217,12 @@ const KelolaPengguna = () => {
                     </button>
                   )}
 
-                  {/* Tombol Nonaktifkan (Hanya untuk Dokter yang statusnya aktif/verified) */}
+                  {/* Tombol Nonaktifkan (Hanya untuk Dokter yang sudah Diverifikasi/Aktif) */}
                   {user.role !== 'Pasien' && (user.status === 'verified' || user.status === 'active') && (
                     <button
                       className="btn-deactivate"
                       onClick={() => handleDeactivate(user.address, user.name)}
-                      title="Nonaktifkan dokter ini"
+                      title="Nonaktifkan / Hapus dokter ini"
                     >
                       <UserX size={14} />
                       Nonaktifkan
@@ -238,14 +251,15 @@ const KelolaPengguna = () => {
 
         .kp-search-bar {
           position: relative;
+          display: flex;
+          align-items: center;
           margin-bottom: 20px;
         }
         .kp-search-icon {
           position: absolute;
           left: 14px;
-          top: 50%;
-          transform: translateY(-50%);
           color: #aaa;
+          pointer-events: none;
         }
         .kp-search-input {
           width: 100%;
