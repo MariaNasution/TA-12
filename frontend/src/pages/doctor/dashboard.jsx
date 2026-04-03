@@ -25,7 +25,8 @@
       
       const [patientsHistory, setPatientsHistory] = useState([]);
       const [approvedDocs, setApprovedDocs] = useState([]); 
-      const [pendingDocs, setPendingDocs] = useState([]); 
+      const [pendingDocs, setPendingDocs] = useState([]);
+      const [rejectedDocs, setRejectedDocs] = useState([]); 
 
       useEffect(() => {
         if (loading) return;
@@ -195,10 +196,8 @@ const handleSaveMedicalData = async (e) => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ address: address })
                 });
-                setNotifs(prevNotifs => 
-                    prevNotifs.map(n => ({ ...n, is_read: 1 }))
-                );
-
+                // Refresh notifikasi dari server agar selalu up-to-date
+                await fetchNotifications();
             } catch (err) {
                 console.error("Gagal update status baca:", err);
             }
@@ -221,6 +220,12 @@ const handleSaveMedicalData = async (e) => {
               
               console.log("Transaksi dikirim:", tx.hash);
               await tx.wait(); 
+
+              // Tandai di localStorage bahwa dokter ini pernah request ke pasien ini
+              // Dipakai untuk mendeteksi status 'Ditolak' di loadPatientStatus
+              const patientChecksum = ethers.utils.getAddress(patientAddr.toLowerCase());
+              const rejectedKey = `rejected_${address.toLowerCase()}_${patientChecksum.toLowerCase()}`;
+              localStorage.setItem(rejectedKey, 'requested');
 
               await fetch("http://127.0.0.1:5000/notifications/add", {
                   method: "POST",
@@ -267,6 +272,7 @@ const handleSaveMedicalData = async (e) => {
 
       let pending = [];
       let approved = [];
+      let rejected = [];
 
       // 2. LOOP DAFTAR PASIEN
       for (let patient of allPatients) {
@@ -289,25 +295,37 @@ const handleSaveMedicalData = async (e) => {
             year: 'numeric'
           });
 
+          let statusLabel = 'Ditolak';
+          if (isAuth) statusLabel = 'Aktif';
+          else if (isPending) statusLabel = 'Menunggu';
+
           const mappedData = {
             name: patient.name || "Pasien",
             address: pChecksum,
-            date: isAuth ? `${tanggalHariIni}` : tanggalHariIni,
-            status: isAuth ? 'Aktif' : 'Menunggu'
+            date: tanggalHariIni,
+            status: statusLabel
           };
 
           if (isAuth) {
             approved.push(mappedData);
           } else if (isPending) {
             pending.push(mappedData);
+          } else {
+            // Pernah dikirim request (ada di riwayat notifikasi) namun sudah ditolak pasien
+            // Kita cek apakah dokter pernah send request ke pasien ini melalui localStorage
+            const rejectedKey = `rejected_${address.toLowerCase()}_${pChecksum.toLowerCase()}`;
+            if (localStorage.getItem(rejectedKey) === 'requested') {
+              rejected.push({ ...mappedData, status: 'Ditolak' });
+            }
           }
         } catch (err) { continue; }
       }
 
-      console.log("[DEBUG] Hasil Akhir Mapping Dokter:", { approved: approved.length, pending: pending.length });
+      console.log("[DEBUG] Hasil Akhir Mapping Dokter:", { approved: approved.length, pending: pending.length, rejected: rejected.length });
       
       setApprovedDocs(approved);
       setPendingDocs(pending);
+      setRejectedDocs(rejected);
 
     } catch (error) {
       console.error(" [DEBUG] Gagal load status:", error);
@@ -379,15 +397,16 @@ const handleSaveMedicalData = async (e) => {
               active: approvedDocs.length,
               pending: pendingDocs.length,
               totalInput: totalSemuaInputan,
-              rejected: 0 
+              rejected: rejectedDocs.length 
             }}
             // Kolom Kiri: Pasien Aktif
             activePatients={approvedDocs.slice(0, 5)}
             
-            // KOLOM KANAN: Status Request (Kita gabungkan Pending + Approved)
+            // KOLOM KANAN: Status Request (Kita gabungkan Pending + Approved + Rejected)
             recentRequests={[
               ...pendingDocs.map(r => ({ ...r, status: "Menunggu" })),
               ...approvedDocs.map(a => ({ ...a, status: "Aktif" })),
+              ...rejectedDocs.map(r => ({ ...r, status: "Ditolak" })),
             ].slice(0, 5)} // Ambil 5 yang terbaru
             
             recentInputs={allFormattedInputs.slice(0, 5)} 
@@ -402,6 +421,7 @@ const handleSaveMedicalData = async (e) => {
                 txLoading={txLoading}
                 pendingRequests={pendingDocs} 
                 approvedDocs={approvedDocs}
+                rejectedRequests={rejectedDocs}
               />
             )}
 

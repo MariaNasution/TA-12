@@ -7,7 +7,8 @@ const RequestAccess = ({
   handleRequest, 
   txLoading,
   pendingRequests = [],
-  approvedDocs = [] 
+  approvedDocs = [],
+  rejectedRequests = []
 }) => {
   return (
     <div className="request-wrapper">
@@ -106,7 +107,7 @@ const RequestAccess = ({
     </tr>
   ))}
 
-  {typeof rejectedRequests !== 'undefined' && rejectedRequests.map((req, idx) => (
+  {rejectedRequests.length > 0 && rejectedRequests.map((req, idx) => (
     <tr key={`rej-${idx}`}>
       <td className="info-cell">
         <div className="patient-name">{req.name}</div>
@@ -120,7 +121,7 @@ const RequestAccess = ({
   ))}
 
               {/* 4. JIKA SEMUA KOSONG */}
-              {approvedDocs.length === 0 && pendingRequests.length === 0 && (
+              {approvedDocs.length === 0 && pendingRequests.length === 0 && rejectedRequests.length === 0 && (
                 <tr>
                   <td colSpan="3" className="empty-row">Belum ada riwayat permintaan akses.</td>
                 </tr>

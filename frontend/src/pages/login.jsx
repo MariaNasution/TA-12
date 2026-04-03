@@ -66,7 +66,7 @@ export default function LoginPage() {
             const result = await loginWithPassword(address, password || "");
 
             if (result.success) {
-                showToast(`Login Sukses sebagai ${result.data.role}`, "success");
+                showToast(`Selamat Datang ${result.data.role}!!!`, "success");
             } else {
                 const errLower = (result.error || "").toLowerCase();
                 if (errLower.includes("password salah")) {

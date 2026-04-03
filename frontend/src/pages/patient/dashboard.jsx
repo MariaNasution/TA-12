@@ -247,7 +247,11 @@ setMedicalRecords(finalData);
         });
       alert("Permintaan ditolak!");
       loadRequests();
-    } catch (error) { console.error(error); }
+    } catch (error) { 
+      console.error("Gagal menolak akses:", error);
+      const errorMsg = error?.data?.message || error?.message || "Terjadi kesalahan";
+      alert("Gagal menolak permintaan: " + errorMsg);
+    }
     finally { setIsProcessing(false); }
   };
 
