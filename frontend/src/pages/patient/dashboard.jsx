@@ -13,7 +13,7 @@ import { CONTRACT_ADDRESS, HEALTH_RECORD_ABI } from '../../api/contract_abi';
 import { ethers } from 'ethers';
 
 export default function PatientDashboard() {
-  const { address, role, status, loading, isAuthenticated } = useAuth();
+  const { address, role, status, loading, isAuthenticated, userName } = useAuth();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('beranda');
   const [medicalRecords, setMedicalRecords] = useState([]);
@@ -147,7 +147,7 @@ setMedicalRecords(finalData);
       console.error("Gagal load data:", error);
     }
   };
-    const handleRevoke = async (docAddr) => {
+    const handleRevoke = async (docAddr, docName) => {
         setIsProcessing(true);
         try {
             const provider = new ethers.providers.Web3Provider(window.ethereum);
@@ -156,12 +156,25 @@ setMedicalRecords(finalData);
             
             const tx = await contract.revokeAccess(ethers.utils.getAddress(docAddr.toLowerCase()));
             await tx.wait();
+            
+            // 1. Notifikasi ke DOKTER
             await fetch("http://127.0.0.1:5000/notifications/add", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    address: docAddr.toLowerCase(), // Target DOKTER
-                    pesan: `Akses Dicabut: Pasien ${address.substring(0, 6)}... telah mencabut izin akses Anda.`
+                    address: docAddr.toLowerCase(), 
+                    pesan: `Akses Dicabut: Pasien ${userName || address.substring(0, 6) + '...'} telah mencabut izin akses Anda.`
+                })
+            });
+
+            // 2. Notifikasi ke PASIEN sendiri
+            const dName = docName || docAddr.substring(0, 6) + '...';
+            await fetch("http://127.0.0.1:5000/notifications/add", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    address: address.toLowerCase(), 
+                    pesan: `Perizinan oleh Dokter ${dName} berhasil di cabut`
                 })
             });
             alert("Izin dokter telah dicabut!");
@@ -230,19 +243,32 @@ setMedicalRecords(finalData);
     finally { setIsProcessing(false); }
   };
 
-  const handleReject = async (docAddr) => {
+  const handleReject = async (docAddr, docName) => {
     setIsProcessing(true);
     try {
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const contract = new ethers.Contract(CONTRACT_ADDRESS, HEALTH_RECORD_ABI, provider.getSigner());
       const tx = await contract.rejectAccess(ethers.utils.getAddress(docAddr.toLowerCase()));
       await tx.wait();
+      
+      // 1. Notifikasi ke DOKTER
       await fetch("http://127.0.0.1:5000/notifications/add", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 address: docAddr.toLowerCase(), 
-                pesan: `❌ Akses Ditolak: Permintaan Anda ke pasien ${address.substring(0, 6)}... ditolak.`
+                pesan: `❌ Akses Ditolak: Perizinan kepada Pasien ${userName || address.substring(0, 6) + '...'} telah di tolak.`
+            })
+        });
+
+      // 2. Notifikasi ke PASIEN sendiri
+      const dName = docName || docAddr.substring(0, 6) + '...';
+      await fetch("http://127.0.0.1:5000/notifications/add", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                address: address.toLowerCase(), 
+                pesan: `Perizinan oleh Dokter ${dName} berhasil di tolak`
             })
         });
       alert("Permintaan ditolak!");

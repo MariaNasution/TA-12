@@ -24,7 +24,7 @@ const AksesDokter = ({ pendingDocs = [], approvedDocs = [], onGrant, onReject, o
               <div className="action-btns">
                 <button 
                   className="btn-tolak" 
-                  onClick={() => onReject(doc.address)}
+                  onClick={() => onReject(doc.address, doc.name)}
                   disabled={isProcessing}
                 >
                   Tolak
@@ -61,7 +61,7 @@ const AksesDokter = ({ pendingDocs = [], approvedDocs = [], onGrant, onReject, o
                 className="btn-revoke-red" 
                 onClick={() => {
                     if(window.confirm(`Cabut izin akses untuk ${doc.name}?`)) {
-                        onRevoke(doc.address);
+                        onRevoke(doc.address, doc.name);
                     }
                 }}
                 disabled={isProcessing}
